@@ -396,6 +396,12 @@ impl Consul {
     /// Context: To get a list of healthy instances for a service to return their IP/ports.
     /// ServiceAddress is the IP address of the service host — if empty, node address should be used per
     /// See: https://www.consul.io/api-docs/catalog#list-nodes-for-service
+    /// More context: there is a slight difference in the health vs catalog
+    /// endpoints but that's already described in that we use the service port.
+    /// What was confirmed was to use the node port but that doesn't exist
+    /// in the health endpoint. These requests models are primarily for the
+    /// health endpoints
+    /// https://www.consul.io/api-docs/health#list-nodes-for-service
     fn parse_host_port_from_service_node_response(sn: ServiceNode) -> (String, u16) {
         (
             if sn.service.address.is_empty() {
