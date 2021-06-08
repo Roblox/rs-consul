@@ -1,0 +1,26 @@
+[package]
+name = "consul"
+version = "0.1.0"
+authors = ["Roblox <persistence@roblox.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# keep this list sorted!
+[dependencies]
+base64 = "0.13.0"
+futures = "0.3.8"
+http = "0.2.1"
+hyper = "0.14.2"
+hyper-tls = "0.5.0"
+opentelemetry-wrapper = { path = "../opentelemetry-wrapper" }
+quick-error = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+slog-scope = "4.3"
+smart-default = "0.6.0"
+tokio = { version = "1.1.1", features = ["full"] }
+ureq = { version = "1.5.4", features = ["json"] }
+
+[dev-dependencies]
+base64 = "0.13.0"
