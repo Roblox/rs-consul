@@ -393,7 +393,9 @@ impl Consul {
 
     /// Parse the address and port from a Consul [`ServiceNode`](`ServiceNode`) response.
     /// This chooses the Service address:port if the address is present. If not, it chooses the Node address with the service port.
-    /// https://roblox.slack.com/archives/C01E58TBWVC/p1621622393146700?thread_ts=1621544799.123700&cid=C01E58TBWVC
+    /// Context: To get a list of healthy instances for a service to return their IP/ports.
+    /// ServiceAddress is the IP address of the service host — if empty, node address should be used per
+    /// See: https://www.consul.io/api-docs/catalog#list-nodes-for-service
     fn parse_host_port_from_service_node_response(sn: ServiceNode) -> (String, u16) {
         (
             if sn.service.address.is_empty() {
