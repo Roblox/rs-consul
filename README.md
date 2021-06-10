@@ -1,5 +1,6 @@
 # rs-consul
 [![Main](https://github.com/Roblox/rs-consul/actions/workflows/main.yml/badge.svg)](https://github.com/Roblox/rs-consul/actions/workflows/main.yml)
+
 This crate provides access to a set of strongly typed apis to interact with
 consul (https://www.consul.io/)
 
