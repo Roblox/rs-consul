@@ -23,3 +23,6 @@ For contributions, please:
 1. Make a pull request
 2. Make sure the tests pass
 3. Add a bullet to the Changelog
+
+## License
+TODO: Insert license here.
