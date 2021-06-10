@@ -17,3 +17,9 @@ rs-consul = "0.1.0"
 ```
 cargo build
 ```
+
+## Contributions
+For contributions, please:
+1. Make a pull request
+2. Make sure the tests pass
+3. Add a bullet to the Changelog
