@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  lint-all:
+  lint:
     runs-on: "ubuntu-latest"
     container: rust:1.52.1
 
