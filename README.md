@@ -41,4 +41,4 @@ For contributions, please:
 3. Add a bullet to the Changelog
 
 ## License
-TODO: Insert license here.
+rs-consul is available under the MIT license. See [LICENSE](LICENSE) for details.
