@@ -1,4 +1,4 @@
-name: Format all code and run cargo update in repository
+name: Format Code
 
 on:
   push:
