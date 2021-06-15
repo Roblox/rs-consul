@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Rust Format
-        uses: rustup component add rustfmt
+        run: rustup component add rustfmt
 
       - name: Format code
         run: cargo fmt --all
