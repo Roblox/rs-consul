@@ -11,9 +11,9 @@ edition = "2018"
 base64 = "0.13.0"
 futures = "0.3.8"
 http = "0.2.1"
-hyper = "0.14.2"
+hyper = { version = "0.14.2", features = ["full"] }
 hyper-tls = "0.5.0"
-opentelemetry-wrapper = { path = "../opentelemetry-wrapper" }
+opentelemetry = { version = "0.12", features = ["tokio-support"] }
 quick-error = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
