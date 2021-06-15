@@ -20,6 +20,9 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
+      - name: Install Rust Linter
+        run: rustup component add clippy
+
       - name: Lint Rust
         run: cargo clippy -- -D warnings
 
