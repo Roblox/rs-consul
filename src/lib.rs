@@ -5,10 +5,10 @@
 
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 use hyper_tls::HttpsConnector;
-use opentelemetry_wrapper::{
-    global::{self, BoxedTracer},
-    trace::{Span, StatusCode},
-};
+use opentelemetry::global;
+use opentelemetry::global::BoxedTracer;
+use opentelemetry::trace::Span;
+use opentelemetry::trace::StatusCode;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
@@ -16,6 +16,7 @@ use std::{env, str::Utf8Error};
 use tokio::time::timeout;
 
 pub use types::*;
+mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
 
@@ -393,15 +394,7 @@ impl Consul {
 
     /// Parse the address and port from a Consul [`ServiceNode`](`ServiceNode`) response.
     /// This chooses the Service address:port if the address is present. If not, it chooses the Node address with the service port.
-    /// Context: To get a list of healthy instances for a service to return their IP/ports.
-    /// ServiceAddress is the IP address of the service host — if empty, node address should be used per
-    /// See: https://www.consul.io/api-docs/catalog#list-nodes-for-service
-    /// More context: there is a slight difference in the health vs catalog
-    /// endpoints but that's already described in that we use the service port.
-    /// What was confirmed was to use the node port but that doesn't exist
-    /// in the health endpoint. These requests models are primarily for the
-    /// health endpoints
-    /// https://www.consul.io/api-docs/health#list-nodes-for-service
+    /// https://roblox.slack.com/archives/C01E58TBWVC/p1621622393146700?thread_ts=1621544799.123700&cid=C01E58TBWVC
     fn parse_host_port_from_service_node_response(sn: ServiceNode) -> (String, u16) {
         (
             if sn.service.address.is_empty() {
@@ -508,7 +501,7 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
-        let span = opentelemetry_wrapper::span_for_request(&self.tracer, &req);
+        let span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
         let future = self.https_client.request(req);
 
         let response = if let Some(dur) = duration {
@@ -520,7 +513,7 @@ impl Consul {
             future.await.map_err(ConsulError::ResponseError)?
         };
 
-        opentelemetry_wrapper::annotate_span_for_response(&span, &response);
+        crate::hyper_wrapper::annotate_span_for_response(&span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {
