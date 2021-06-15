@@ -18,6 +18,22 @@ rs-consul = "0.1.0"
 cargo build
 ```
 
+### Tests
+#### Local Consul
+Start consul locally with a docker image.
+```bash
+docker-compose up -d
+```
+
+#### CI Consul
+In CI, we start a service container for the test.
+
+#### Running Tests
+```bash
+cargo test
+```
+
+
 ## Contributions
 For contributions, please:
 1. Make a pull request
