@@ -1,0 +1,26 @@
+name: Format all code and run cargo update in repository
+
+on:
+  push:
+    branches-ignore:
+      - mains
+
+jobs:
+  format-code:
+    runs-on: "ubuntu-latest"
+    container: rust:1.52.1
+
+    steps:
+      - name: Checkout the code on merge
+        uses: actions/checkout@v2
+
+      - name: Format code
+        run: make fmt
+
+      - name: Update cargo
+        run: cargo update
+
+      - name: Commit the changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          author_name: GitHub Action Bot
