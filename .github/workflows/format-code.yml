@@ -14,6 +14,9 @@ jobs:
       - name: Checkout the code on merge
         uses: actions/checkout@v2
 
+      - name: Install Rust Format
+        uses: rustup component add rustfmt
+
       - name: Format code
         run: cargo fmt --all
 
