@@ -30,4 +30,4 @@ jobs:
         run: cargo install cargo-sort-ck
 
       - name: Lint Cargo.toml
-        run: cargo sort-ck Cargo.toml services/*/Cargo.toml crates/*/Cargo.toml
+        run: cargo sort-ck Cargo.toml
