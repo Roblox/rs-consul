@@ -1,0 +1,27 @@
+name: Lint
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  lint-all:
+    runs-on: "ubuntu-latest"
+    container: rust:1.52.1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint Rust
+        run: cargo clippy -- -D warnings
+
+      - name: Install Cargo Sort Check
+        run: cargo install cargo-sort-ck
+
+      - name: Lint Cargo.toml
+        run: cargo sort-ck Cargo.toml services/*/Cargo.toml crates/*/Cargo.toml
