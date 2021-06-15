@@ -1,0 +1,29 @@
+name: Format Code
+
+on:
+  push:
+    branches-ignore:
+      - mains
+
+jobs:
+  format-code:
+    runs-on: "ubuntu-latest"
+    container: rust:1.52.1
+
+    steps:
+      - name: Checkout the code on merge
+        uses: actions/checkout@v2
+
+      - name: Install Rust Format
+        run: rustup component add rustfmt
+
+      - name: Format code
+        run: cargo fmt --all
+
+      - name: Update cargo
+        run: cargo update
+
+      - name: Commit the changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          author_name: GitHub Action Bot

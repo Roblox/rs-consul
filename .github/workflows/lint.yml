@@ -1,0 +1,33 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: "ubuntu-latest"
+    container: rust:1.52.1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Rust Format
+        run: rustup component add rustfmt
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Install Rust Linter
+        run: rustup component add clippy
+
+      - name: Lint Rust
+        run: cargo clippy -- -D warnings
+
+      - name: Install Cargo Sort Check
+        run: cargo install cargo-sort-ck
+
+      - name: Lint Cargo.toml
+        run: cargo sort-ck Cargo.toml
