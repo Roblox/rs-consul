@@ -632,13 +632,13 @@ mod tests {
         let res = consul.get_service_nodes(req).await.unwrap();
         assert_eq!(res.len(), 0);
 
-        let req = GetServiceNodesRequest {
-            service: "nomad",
-            passing: false,
-            ..Default::default()
-        };
-        let res = consul.get_service_nodes(req).await.unwrap();
-        assert_eq!(res.len(), 3);
+        // let req = GetServiceNodesRequest {
+        //     service: "nomad",
+        //     passing: false,
+        //     ..Default::default()
+        // };
+        // let res = consul.get_service_nodes(req).await.unwrap();
+        // assert_eq!(res.len(), 3);
 
         let req = GetServiceNodesRequest {
             service: "crdb-entities-as-a-service-one",
