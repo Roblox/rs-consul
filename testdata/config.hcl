@@ -4,10 +4,10 @@ acl {
   enable_token_persistence = true
 }
 
-# CockroachDB cluster 'crdb-entities-as-a-service-one'
+# CockroachDB cluster 'crdb-test-service-one'
 services {
-  id = "crdb-entities-as-a-service-one-1"
-  name = "crdb-entities-as-a-service-one"
+  id = "crdb-test-service-one-1"
+  name = "crdb-test-service-one"
   address = "cockroachdb-node-1."
   port = 26257
   checks = [
@@ -19,8 +19,8 @@ services {
   ]
 }
 services {
-  id = "crdb-entities-as-a-service-one-2"
-  name = "crdb-entities-as-a-service-one"
+  id = "crdb-test-service-one-2"
+  name = "crdb-test-service-one"
   address = "cockroachdb-node-2."
   port = 26257
   checks = [
@@ -32,8 +32,8 @@ services {
   ]
 }
 services {
-  id = "crdb-entities-as-a-service-one-3"
-  name = "crdb-entities-as-a-service-one"
+  id = "crdb-test-service-one-3"
+  name = "crdb-test-service-one"
   address = "cockroachdb-node-3."
   port = 26257
   checks = [
