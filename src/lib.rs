@@ -666,7 +666,7 @@ mod tests {
         // assert_eq!(res.len(), 3);
 
         // let req = GetServiceNodesRequest {
-        //     service: "crdb-entities-as-a-service-one",
+        //     service: "crdb-test-service-one",
         //     passing: true,
         //     ..Default::default()
         // };
