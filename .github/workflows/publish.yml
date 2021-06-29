@@ -1,0 +1,19 @@
+name: Publish
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  dry-run:
+    runs-on: "ubuntu-latest"
+    container: rust:1.52.1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Publish Dry Run
+        run: cargo publish --dry-run
