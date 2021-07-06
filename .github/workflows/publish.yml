@@ -24,7 +24,6 @@ jobs:
         run: cargo test
 
   dry-run:
-    needs: test
     runs-on: ubuntu-latest
     container: rust:1.52.1
 
@@ -35,7 +34,7 @@ jobs:
         run: cargo publish --dry-run
 
   publish:
-    needs: dry-run
+    needs: [test, dry-run]
     runs-on: ubuntu-latest
     container: rust:1.52.1
     environment: crates-publish
