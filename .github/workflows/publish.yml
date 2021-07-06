@@ -11,6 +11,7 @@ jobs:
   dry-run:
     runs-on: "ubuntu-latest"
     container: rust:1.52.1
+    environment: crates-publish
 
     steps:
       - uses: actions/checkout@v2
