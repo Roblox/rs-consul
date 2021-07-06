@@ -1,0 +1,42 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: rust:1.52.1
+    services:
+      consul:
+        image: consul:1.9.3
+    env:
+      CONSUL_HTTP_ADDR: http://consul:8500
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Test
+        run: cargo test
+
+  dry-run:
+    runs-on: ubuntu-latest
+    container: rust:1.52.1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Publish Dry Run
+        run: cargo publish --dry-run
+
+  publish:
+    needs: [test, dry-run]
+    runs-on: ubuntu-latest
+    container: rust:1.52.1
+    environment: crates-publish
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Publish to Crates.io
+        run: cargo publish --token ${{ secrets.CARGO_PUBLISH_TOKEN_SFONG }}
