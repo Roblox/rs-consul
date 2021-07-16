@@ -1,4 +1,6 @@
 # rs-consul
+[![Crates.io: rs-consul](https://img.shields.io/crates/v/rs-consul.svg)](https://crates.io/crates/rs-consul)
+[![Documentation](https://docs.rs/rs-consul/badge.svg)](https://docs.rs/rs-consul)
 [![Main](https://github.com/Roblox/rs-consul/actions/workflows/main.yml/badge.svg)](https://github.com/Roblox/rs-consul/actions/workflows/main.yml)
 
 This crate provides access to a set of strongly typed apis to interact with
