@@ -1,6 +1,6 @@
 [package]
 name = "rs-consul"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Roblox"]
 edition = "2018"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
@@ -18,7 +18,7 @@ futures = "0.3.8"
 http = "0.2.1"
 hyper = { version = "0.14.2", features = ["full"] }
 hyper-tls = "0.5.0"
-opentelemetry = { version = "0.12", features = ["tokio-support"] }
+opentelemetry = { version = "0.15", features = ["tokio", "rt-tokio"] }
 quick-error = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

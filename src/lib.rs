@@ -533,7 +533,7 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
-        let span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
+        let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
         let future = self.https_client.request(req);
 
         let response = if let Some(dur) = duration {
@@ -545,7 +545,7 @@ impl Consul {
             future.await.map_err(ConsulError::ResponseError)?
         };
 
-        crate::hyper_wrapper::annotate_span_for_response(&span, &response);
+        crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {

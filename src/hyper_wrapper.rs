@@ -33,7 +33,7 @@ use opentelemetry::{
 /// semantic conventions for HTTP traffic.
 /// See https://github.com/open-telemetry/opentelemetry-specification/blob/v0.5.0/specification/trace/semantic_conventions/http.md
 pub fn span_for_request<T>(tracer: &BoxedTracer, req: &hyper::Request<T>) -> BoxedSpan {
-    let span = tracer.start(&format!(
+    let mut span = tracer.start(format!(
         "HTTP {} {}",
         req.method(),
         req.uri().host().unwrap_or("<unknown>")
@@ -69,7 +69,7 @@ pub fn span_for_request<T>(tracer: &BoxedTracer, req: &hyper::Request<T>) -> Box
 
 /// Annotate a span that has previously been created given the HTTP response.
 /// The passed in span must have been created for the HTTP request for which we got the response.
-pub fn annotate_span_for_response<T>(span: &BoxedSpan, response: &hyper::Response<T>) {
+pub fn annotate_span_for_response<T>(span: &mut BoxedSpan, response: &hyper::Response<T>) {
     let status = response.status();
 
     span.set_attribute(KeyValue::new(
