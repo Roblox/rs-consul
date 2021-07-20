@@ -165,6 +165,91 @@ impl Drop for Lock<'_> {
     }
 }
 
+/// Payload struct to register or update entries in consul's catalog.
+/// See https://www.consul.io/api-docs/catalog#register-entity for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityPayload {
+    /// Optional UUID to assign to the node. This string is required to be 36-characters and UUID formatted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ID: Option<String>,
+    /// Node ID to register.
+    pub Node: String,
+    /// The address to register.
+    pub Address: String,
+    /// The datacenter to register in, defaults to the agent's datacenter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Datacenter: Option<String>,
+    /// Tagged addressed to register with.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub TaggedAddresses: HashMap<String, String>,
+    /// KV metadata paris to register with.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub NodeMeta: HashMap<String, String>,
+    /// Optional service to register.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Service: Option<RegisterEntityService>,
+    /// Optional check to register
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Check: Option<RegisterEntityCheck>,
+    /// Whether to skip updating the nodes information in the registration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub SkipNodeUpdate: Option<bool>,
+}
+/// The service to register with consul's global catalog.
+/// See https://www.consul.io/api/agent/service for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityService {
+    /// ID to register service will, defaults to Service.Service property.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ID: Option<String>,
+    /// The name of the service.
+    pub Service: String,
+    /// Optional tags associated with the service.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub Tags: Vec<String>,
+    /// Optional map of explicit LAN and WAN addresses for the service.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub TaggedAddresses: HashMap<String, String>,
+    /// Optional key value meta associated with the service.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub Meta: HashMap<String, String>,
+    /// The port of the service
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Port: Option<u16>,
+    /// The consul namespace to register the service in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Namespace: Option<String>,
+}
+/// Information related to registering a check.
+/// See https://www.consul.io/docs/discovery/checks for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityCheck {
+    /// The node to execute the check on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Node: Option<String>,
+    /// Optional check id, defaults to the name of the check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CheckID: Option<String>,
+    /// The name associated with the check
+    pub Name: String,
+    /// Opaque field encapsulating human-readable text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Notes: Option<String>,
+    /// The status of the check. Must be one of 'passing', 'warning', or 'critical'.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Status: Option<String>,
+    /// ID of the service this check is for. If no ID of a service running on the node is provided,
+    /// the check is treated as a node level check
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ServiceID: Option<String>,
+    /// Details for a TCP or HTTP health check.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub Definition: HashMap<String, String>,
+}
+
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
@@ -365,20 +450,31 @@ impl Consul {
         self.read_key(req).await
     }
 
-    /// Returns the services currently registered with consul for the datacenter of the agent being queried.
-    /// See https://www.consul.io/api-docs/catalog#list-services for more information.
+    // TODO allow clients to specify per-endpoint timeouts
+    /// Registers or updates entries in consul's global catalog.
+    /// See https://www.consul.io/api-docs/catalog#register-entity for more information.
     /// # Arguments:
-    /// - timeout: The timeout [`Duration`](Duration) to apply to the request.
+    /// - payload: The [`RegisterEntityPayload`](RegisterEntityPayload) to provide the register entity API.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_all_registered_service_names(
-        &self,
-        timeout: Option<Duration>,
-    ) -> Result<Vec<String>> {
+    pub async fn register_entity(&self, payload: &RegisterEntityPayload) -> Result<()> {
+        let uri = format!("{}/v1/catalog/register", self.config.address);
+        let request = hyper::Request::builder().method(Method::PUT).uri(uri);
+        let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
+        self.execute_request(request, payload.into(), Some(Duration::from_secs(5)))
+            .await?;
+        Ok(())
+    }
+
+    /// Returns the services currently registered with consul for the datacenter of the agent being queried.
+    /// See https://www.consul.io/api-docs/catalog#list-services for more information.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn get_all_registered_service_names(&self) -> Result<Vec<String>> {
         let uri = format!("{}/v1/catalog/services", self.config.address);
         let request = hyper::Request::builder().method(Method::GET).uri(uri);
         let (mut response_body, _) = self
-            .execute_request(request, hyper::Body::empty(), timeout)
+            .execute_request(request, hyper::Body::empty(), Some(Duration::from_secs(5)))
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
@@ -673,12 +769,49 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_registered_service_names() {
+    async fn test_register_and_retrieve_services() {
         let consul = get_client();
-        let _res = consul
-            .get_all_registered_service_names(Some(Duration::from_secs(1)))
+
+        let new_service_name = "test-service-1".to_string();
+
+        // verify a service by this name is currently not registered
+        let service_names_before_register = consul
+            .get_all_registered_service_names()
             .await
             .expect("expected get_registered_service_names request to succeed");
+        assert!(!service_names_before_register.contains(&new_service_name));
+
+        // register a new service
+        let payload = RegisterEntityPayload {
+            ID: None,
+            Node: "local".to_string(),
+            Address: "127.0.0.1".to_string(),
+            Datacenter: None,
+            TaggedAddresses: Default::default(),
+            NodeMeta: Default::default(),
+            Service: Some(RegisterEntityService {
+                ID: None,
+                Service: new_service_name.clone(),
+                Tags: vec![],
+                TaggedAddresses: Default::default(),
+                Meta: Default::default(),
+                Port: Some(42424),
+                Namespace: None,
+            }),
+            Check: None,
+            SkipNodeUpdate: None,
+        };
+        consul
+            .register_entity(&payload)
+            .await
+            .expect("expected register_entity request to succeed");
+
+        // verify the newly registered service is retrieved
+        let service_names_after_register = consul
+            .get_all_registered_service_names()
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(service_names_after_register.contains(&new_service_name));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
