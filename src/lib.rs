@@ -27,6 +27,10 @@ SOFTWARE.
 //! This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)
 #![deny(missing_docs)]
 
+use std::collections::HashMap;
+use std::time::Duration;
+use std::{env, str::Utf8Error};
+
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 use hyper_tls::HttpsConnector;
 use opentelemetry::global;
@@ -36,10 +40,10 @@ use opentelemetry::trace::StatusCode;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
-use std::{env, str::Utf8Error};
 use tokio::time::timeout;
 
 pub use types::*;
+
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -361,6 +365,27 @@ impl Consul {
         self.read_key(req).await
     }
 
+    /// Returns the services currently registered with consul for the datacenter of the agent being queried.
+    /// See https://www.consul.io/api-docs/catalog#list-services for more information.
+    /// # Arguments:
+    /// - timeout: The timeout [`Duration`](Duration) to apply to the request.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn get_all_registered_service_names(
+        &self,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<String>> {
+        let uri = format!("{}/v1/catalog/services", self.config.address);
+        let request = hyper::Request::builder().method(Method::GET).uri(uri);
+        let (mut response_body, _) = self
+            .execute_request(request, hyper::Body::empty(), timeout)
+            .await?;
+        let bytes = response_body.copy_to_bytes(response_body.remaining());
+        let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
+            .map_err(ConsulError::ResponseDeserializationFailed)?;
+        Ok(service_tags_by_name.keys().cloned().collect())
+    }
+
     /// returns the nodes providing the service indicated on the path.
     /// Users can also build in support for dynamic load balancing and other features by incorporating the use of health checks.
     /// See the [consul docs](https://www.consul.io/api-docs/health#list-nodes-for-service) for more information.
@@ -629,9 +654,11 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
     use tokio::time::sleep;
+
+    use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn create_and_read_key() {
@@ -643,6 +670,15 @@ mod tests {
 
         let res = read_key(&consul, key).await;
         verify_single_value_matches(res, string_value);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_registered_service_names() {
+        let consul = get_client();
+        let _res = consul
+            .get_all_registered_service_names(Some(Duration::from_secs(1)))
+            .await
+            .expect("expected get_registered_service_names request to succeed");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
