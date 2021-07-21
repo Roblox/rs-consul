@@ -30,7 +30,7 @@ use smart_default::SmartDefault;
 
 // TODO retrofit other get APIs to use this struct
 /// Query options for Consul endpoints.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QueryOptions {
     /// Specifies the namespace to use.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
@@ -319,6 +319,7 @@ pub struct RegisterEntityPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub SkipNodeUpdate: Option<bool>,
 }
+
 /// The service to register with consul's global catalog.
 /// See https://www.consul.io/api/agent/service for more information.
 #[allow(non_snake_case)]
@@ -345,6 +346,7 @@ pub struct RegisterEntityService {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub Namespace: Option<String>,
 }
+
 /// Information related to registering a check.
 /// See https://www.consul.io/docs/discovery/checks for more information.
 #[allow(non_snake_case)]
