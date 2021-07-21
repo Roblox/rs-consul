@@ -27,6 +27,10 @@ SOFTWARE.
 //! This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)
 #![deny(missing_docs)]
 
+use std::collections::HashMap;
+use std::time::Duration;
+use std::{env, str::Utf8Error};
+
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 use hyper_tls::HttpsConnector;
 use opentelemetry::global;
@@ -36,10 +40,10 @@ use opentelemetry::trace::StatusCode;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
-use std::{env, str::Utf8Error};
 use tokio::time::timeout;
 
 pub use types::*;
+
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -297,11 +301,7 @@ impl Consul {
     /// - request - the [LockRequest](consul::types::LockRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_lock<'a, 'b>(
-        &'b self,
-        request: LockRequest<'a>,
-        value: &[u8],
-    ) -> Result<Lock<'b>> {
+    pub async fn get_lock(&self, request: LockRequest<'_>, value: &[u8]) -> Result<Lock<'_>> {
         let session = self.get_session(request).await?;
         let req = CreateOrUpdateKeyRequest {
             key: request.key,
@@ -361,6 +361,51 @@ impl Consul {
         self.read_key(req).await
     }
 
+    /// Registers or updates entries in consul's global catalog.
+    /// See https://www.consul.io/api-docs/catalog#register-entity for more information.
+    /// # Arguments:
+    /// - payload: The [`RegisterEntityPayload`](RegisterEntityPayload) to provide the register entity API.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn register_entity(&self, payload: &RegisterEntityPayload) -> Result<()> {
+        let uri = format!("{}/v1/catalog/register", self.config.address);
+        let request = hyper::Request::builder().method(Method::PUT).uri(uri);
+        let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
+        self.execute_request(request, payload.into(), Some(Duration::from_secs(5)))
+            .await?;
+        Ok(())
+    }
+
+    /// Returns all services currently registered with consul.
+    /// See https://www.consul.io/api-docs/catalog#list-services for more information.
+    /// # Arguments:
+    /// - query_opts: The [`QueryOptions`](QueryOptions) to apply for this endpoint.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn get_all_registered_service_names(
+        &self,
+        query_opts: Option<QueryOptions>,
+    ) -> Result<ResponseMeta<Vec<String>>> {
+        let mut uri = format!("{}/v1/catalog/services", self.config.address);
+        let query_opts = query_opts.unwrap_or_default();
+        add_query_option_params(&mut uri, &query_opts, '?');
+
+        let request = hyper::Request::builder()
+            .method(Method::GET)
+            .uri(uri.clone());
+        let (mut response_body, index) = self
+            .execute_request(request, hyper::Body::empty(), query_opts.timeout)
+            .await?;
+        let bytes = response_body.copy_to_bytes(response_body.remaining());
+        let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
+            .map_err(ConsulError::ResponseDeserializationFailed)?;
+
+        Ok(ResponseMeta {
+            response: service_tags_by_name.keys().cloned().collect(),
+            index,
+        })
+    }
+
     /// returns the nodes providing the service indicated on the path.
     /// Users can also build in support for dynamic load balancing and other features by incorporating the use of health checks.
     /// See the [consul docs](https://www.consul.io/api-docs/health#list-nodes-for-service) for more information.
@@ -371,31 +416,31 @@ impl Consul {
     pub async fn get_service_nodes(
         &self,
         request: GetServiceNodesRequest<'_>,
-    ) -> Result<GetServiceNodesResponse> {
-        let req = self.build_get_service_nodes_req(request);
-        let (mut response_body, _index) = self
-            .execute_request(
-                req,
-                hyper::Body::empty(),
-                Some(std::time::Duration::from_secs(5)),
-            )
+        query_opts: Option<QueryOptions>,
+    ) -> Result<ResponseMeta<GetServiceNodesResponse>> {
+        let query_opts = query_opts.unwrap_or_default();
+        let req = self.build_get_service_nodes_req(request, &query_opts);
+        let (mut response_body, index) = self
+            .execute_request(req, hyper::Body::empty(), query_opts.timeout)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        Ok(serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
-            .map_err(ConsulError::ResponseDeserializationFailed)?)
+        let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
+            .map_err(ConsulError::ResponseDeserializationFailed)?;
+        Ok(ResponseMeta { response, index })
     }
 
     /// Queries consul for a service and returns the Address:Port of all instances registered for that service.
     pub async fn get_service_addresses_and_ports(
         &self,
         service_name: &str,
+        query_opts: Option<QueryOptions>,
     ) -> Result<Vec<(String, u16)>> {
         let request = GetServiceNodesRequest {
             service: service_name,
             passing: true,
             ..Default::default()
         };
-        let services = self.get_service_nodes(request).await.map_err(|e| {
+        let services = self.get_service_nodes(request, query_opts).await.map_err(|e| {
             let err = format!(
                 "Unable to query consul to resolve service '{}' to a list of addresses and ports: {:?}",
                 service_name, e
@@ -405,6 +450,7 @@ impl Consul {
         })?;
 
         let addresses_and_ports = services
+            .response
             .into_iter()
             .map(Self::parse_host_port_from_service_node_response)
             .collect();
@@ -497,6 +543,7 @@ impl Consul {
     fn build_get_service_nodes_req(
         &self,
         request: GetServiceNodesRequest<'_>,
+        query_opts: &QueryOptions,
     ) -> http::request::Builder {
         let req = hyper::Request::builder().method(Method::GET);
         let mut url = String::new();
@@ -511,12 +558,7 @@ impl Consul {
         if let Some(filter) = request.filter {
             url.push_str(&format!("&filter={}", filter));
         }
-        if let Some(ns) = request.namespace {
-            url.push_str(&format!("&ns={}", ns));
-        }
-        if let Some(dc) = request.datacenter {
-            url.push_str(&format!("&dc={}", dc));
-        }
+        add_query_option_params(&mut url, query_opts, '&');
         req.uri(url)
     }
 
@@ -569,7 +611,7 @@ impl Consul {
             Ok(body) => Ok((Box::new(body), index)),
             Err(e) => {
                 span.set_status(StatusCode::Error, e.to_string());
-                return Err(ConsulError::InvalidResponse(e));
+                Err(ConsulError::InvalidResponse(e))
             }
         }
     }
@@ -602,6 +644,28 @@ impl Consul {
     }
 }
 
+fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut separator: char) {
+    if let Some(ns) = &query_opts.namespace {
+        if !ns.is_empty() {
+            uri.push_str(&format!("{}ns={}", separator, ns));
+            separator = '&';
+        }
+    }
+    if let Some(dc) = &query_opts.datacenter {
+        if !dc.is_empty() {
+            uri.push_str(&format!("{}dc={}", separator, dc));
+            separator = '&';
+        }
+    }
+    if let Some(idx) = query_opts.index {
+        uri.push_str(&format!("{}index={}", separator, idx));
+        separator = '&';
+        if let Some(wait) = query_opts.wait {
+            uri.push_str(&format!("{}wait={}", separator, wait.as_secs()));
+        }
+    }
+}
+
 fn add_namespace_and_datacenter<'a>(
     mut url: String,
     namespace: &'a str,
@@ -629,9 +693,11 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
     use tokio::time::sleep;
+
+    use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn create_and_read_key() {
@@ -645,6 +711,58 @@ mod tests {
         verify_single_value_matches(res, string_value);
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_register_and_retrieve_services() {
+        let consul = get_client();
+
+        let new_service_name = "test-service-44".to_string();
+
+        // verify a service by this name is currently not registered
+        let ResponseMeta {
+            response: service_names_before_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(!service_names_before_register.contains(&new_service_name));
+
+        // register a new service
+        let payload = RegisterEntityPayload {
+            ID: None,
+            Node: "local".to_string(),
+            Address: "127.0.0.1".to_string(),
+            Datacenter: None,
+            TaggedAddresses: Default::default(),
+            NodeMeta: Default::default(),
+            Service: Some(RegisterEntityService {
+                ID: None,
+                Service: new_service_name.clone(),
+                Tags: vec![],
+                TaggedAddresses: Default::default(),
+                Meta: Default::default(),
+                Port: Some(42424),
+                Namespace: None,
+            }),
+            Check: None,
+            SkipNodeUpdate: None,
+        };
+        consul
+            .register_entity(&payload)
+            .await
+            .expect("expected register_entity request to succeed");
+
+        // verify the newly registered service is retrieved
+        let ResponseMeta {
+            response: service_names_after_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(service_names_after_register.contains(&new_service_name));
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn get_services_nodes() {
         let consul = get_client();
@@ -653,8 +771,8 @@ mod tests {
             passing: true,
             ..Default::default()
         };
-        let res = consul.get_service_nodes(req).await.unwrap();
-        assert_eq!(res.len(), 0);
+        let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
+        assert_eq!(response.len(), 0);
 
         // TODO: Make these tests pass for nomad and crdb.
         // let req = GetServiceNodesRequest {
@@ -714,7 +832,7 @@ mod tests {
         let string_value = "This is a lock test";
         let new_string_value = "This is a changed lock test";
         let req = LockRequest {
-            key: key,
+            key,
             behavior: LockExpirationBehavior::Release,
             lock_delay: std::time::Duration::from_secs(1),
             ..Default::default()
@@ -749,7 +867,7 @@ mod tests {
         verify_single_value_matches(key_resp, &new_string_value);
 
         let req = LockRequest {
-            key: key,
+            key,
             behavior: LockExpirationBehavior::Delete,
             lock_delay: std::time::Duration::from_secs(1),
             session_id: &session_id,
@@ -767,7 +885,7 @@ mod tests {
         let key = "test/consul/watchedlock";
         let string_value = "This is a lock test";
         let req = LockRequest {
-            key: key,
+            key,
             behavior: LockExpirationBehavior::Release,
             lock_delay: std::time::Duration::from_secs(0),
             ..Default::default()
@@ -793,7 +911,7 @@ mod tests {
 
         assert!(start_index > 0);
         let watch_req = LockWatchRequest {
-            key: key,
+            key,
             consistency: ConsistencyMode::Consistent,
             index: Some(start_index),
             wait: Duration::from_secs(60),
@@ -843,7 +961,7 @@ mod tests {
 
         let sn = ServiceNode {
             node: node.clone(),
-            service: empty_service.clone(),
+            service: empty_service,
         };
 
         let (host, port) = Consul::parse_host_port_from_service_node_response(sn);
@@ -862,7 +980,7 @@ mod tests {
         value: &str,
     ) -> Result<(bool, u64)> {
         let req = CreateOrUpdateKeyRequest {
-            key: key,
+            key,
             ..Default::default()
         };
         Ok(consul
@@ -872,7 +990,7 @@ mod tests {
 
     async fn read_key(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
         let req = ReadKeyRequest {
-            key: key,
+            key,
             ..Default::default()
         };
         consul.read_key(req).await
@@ -880,7 +998,7 @@ mod tests {
 
     async fn delete_key(consul: &Consul, key: &str) -> Result<bool> {
         let req = DeleteKeyRequest {
-            key: key,
+            key,
             ..Default::default()
         };
         consul.delete_key(req).await

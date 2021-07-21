@@ -22,9 +22,53 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
+use std::collections::HashMap;
+use std::time::Duration;
+
 use serde::{self, Deserialize, Serialize, Serializer};
 use smart_default::SmartDefault;
-use std::time::Duration;
+
+// TODO retrofit other get APIs to use this struct
+/// Query options for Consul endpoints.
+#[derive(Debug, Clone)]
+pub struct QueryOptions {
+    /// Specifies the namespace to use.
+    /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
+    /// This is specified as part of the URL as a query parameter. Added in Consul 1.7.0.
+    /// NOTE: usage of this query parameter requires Consul enterprise.
+    pub namespace: Option<String>,
+    /// Specifies the datacenter to query.
+    /// This will default to the datacenter of the agent being queried.
+    /// This is specified as part of the URL as a query parameter.
+    pub datacenter: Option<String>,
+    /// The timeout to apply to the query, if any, defaults to 5s.
+    pub timeout: Option<Duration>,
+    /// The index to supply as a query parameter, if the endpoint supports blocking queries.
+    pub index: Option<u64>,
+    /// The time to block for, when used in association with an index, if the endpoint supports blocking queries.
+    /// Server side default of 5 minute is applied if not specified, with a limit of 10 minutes and maximum granularity of seconds.
+    pub wait: Option<Duration>,
+}
+impl Default for QueryOptions {
+    fn default() -> Self {
+        Self {
+            namespace: None,
+            datacenter: None,
+            timeout: Some(Duration::from_secs(5)),
+            index: None,
+            wait: None,
+        }
+    }
+}
+
+/// Encapsulates a consul query response and the returned metadata, if any.
+#[derive(Debug)]
+pub struct ResponseMeta<T> {
+    /// Query response.
+    pub response: T,
+    /// The index returned from the consul query via the X-Consul-Index header.
+    pub index: u64,
+}
 
 /// Represents a request to delete a key or all keys sharing a prefix from Consul's Key Value store.
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
@@ -244,6 +288,93 @@ pub(crate) struct CreateSessionRequest {
     pub(crate) ttl: Duration,
 }
 
+/// Payload struct to register or update entries in consul's catalog.
+/// See https://www.consul.io/api-docs/catalog#register-entity for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityPayload {
+    /// Optional UUID to assign to the node. This string is required to be 36-characters and UUID formatted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ID: Option<String>,
+    /// Node ID to register.
+    pub Node: String,
+    /// The address to register.
+    pub Address: String,
+    /// The datacenter to register in, defaults to the agent's datacenter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Datacenter: Option<String>,
+    /// Tagged addressed to register with.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub TaggedAddresses: HashMap<String, String>,
+    /// KV metadata paris to register with.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub NodeMeta: HashMap<String, String>,
+    /// Optional service to register.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Service: Option<RegisterEntityService>,
+    /// Optional check to register
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Check: Option<RegisterEntityCheck>,
+    /// Whether to skip updating the nodes information in the registration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub SkipNodeUpdate: Option<bool>,
+}
+
+/// The service to register with consul's global catalog.
+/// See https://www.consul.io/api/agent/service for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityService {
+    /// ID to register service will, defaults to Service.Service property.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ID: Option<String>,
+    /// The name of the service.
+    pub Service: String,
+    /// Optional tags associated with the service.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub Tags: Vec<String>,
+    /// Optional map of explicit LAN and WAN addresses for the service.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub TaggedAddresses: HashMap<String, String>,
+    /// Optional key value meta associated with the service.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub Meta: HashMap<String, String>,
+    /// The port of the service
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Port: Option<u16>,
+    /// The consul namespace to register the service in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Namespace: Option<String>,
+}
+
+/// Information related to registering a check.
+/// See https://www.consul.io/docs/discovery/checks for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterEntityCheck {
+    /// The node to execute the check on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Node: Option<String>,
+    /// Optional check id, defaults to the name of the check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CheckID: Option<String>,
+    /// The name associated with the check
+    pub Name: String,
+    /// Opaque field encapsulating human-readable text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Notes: Option<String>,
+    /// The status of the check. Must be one of 'passing', 'warning', or 'critical'.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Status: Option<String>,
+    /// ID of the service this check is for. If no ID of a service running on the node is provided,
+    /// the check is treated as a node level check
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ServiceID: Option<String>,
+    /// Details for a TCP or HTTP health check.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub Definition: HashMap<String, String>,
+}
+
 /// Request for the nodes providing a specified service registered in Consul.
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
 pub struct GetServiceNodesRequest<'a> {
@@ -254,14 +385,6 @@ pub struct GetServiceNodesRequest<'a> {
     /// Note that using `near` will ignore `use_streaming_backend` and always use blocking queries, because the data required to
     /// sort the results is not available to the streaming backend.
     pub near: Option<&'a str>,
-    /// Specifies the namespace to use.
-    /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
-    /// This is specified as part of the URL as a query parameter. Added in Consul 1.7.0.
-    pub namespace: Option<&'a str>,
-    /// Specifies the datacenter to query.
-    /// This will default to the datacenter of the agent being queried.
-    /// This is specified as part of the URL as a query parameter.
-    pub datacenter: Option<&'a str>,
     /// (bool: false) Specifies that the server should return only nodes with all checks in the passing state.
     /// This can be used to avoid additional filtering on the client side.
     pub passing: bool,

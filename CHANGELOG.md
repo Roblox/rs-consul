@@ -12,6 +12,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 ### Security
 
+## 0.2.0 - 2021-07-20
+### Added
+- register_entity method and RegisterEntityPayload, and associated, structs
+- get_all_registered_service_names method
+- introduced QueryOptions struct to encapsulate common query options
+- introduced ResponseMeta to encapsulate the index returned
+### Changed
+- get_service_nodes and get_service_addresses_and_ports methods now take QueryOptions as a new parameter
+- get_service_nodes return a ReponseMeta
+- GetServiceNodesRequest was modified to remove redundant fields
+### Deprecated
+### Removed
+### Fixed
+- clippy warnings for some tests
+### Security
+
 ## 0.1.0 - 2021-06-10
 ### Added
 - Initialized repository
