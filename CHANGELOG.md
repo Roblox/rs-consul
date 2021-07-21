@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 ### Security
 
-## 0.1.2 - 2021-07-20
+## 1.0.0 - 2021-07-20
 ### Added
 - register_entity method and RegisterEntityPayload, and associated, structs
 - get_all_registered_service_names method
