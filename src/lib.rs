@@ -468,10 +468,18 @@ impl Consul {
 
     /// Returns the services currently registered with consul for the datacenter of the agent being queried.
     /// See https://www.consul.io/api-docs/catalog#list-services for more information.
+    /// # Arguments:
+    /// - namespace: The namespace of the services to list, defaults to the 'default' namespace.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_all_registered_service_names(&self) -> Result<Vec<String>> {
-        let uri = format!("{}/v1/catalog/services", self.config.address);
+    pub async fn get_all_registered_service_names(
+        &self,
+        namespace: Option<String>,
+    ) -> Result<Vec<String>> {
+        let mut uri = format!("{}/v1/catalog/services", self.config.address);
+        if let Some(ns) = namespace {
+            uri.push_str(&format!("?ns={}", ns));
+        }
         let request = hyper::Request::builder().method(Method::GET).uri(uri);
         let (mut response_body, _) = self
             .execute_request(request, hyper::Body::empty(), Some(Duration::from_secs(5)))
@@ -776,7 +784,7 @@ mod tests {
 
         // verify a service by this name is currently not registered
         let service_names_before_register = consul
-            .get_all_registered_service_names()
+            .get_all_registered_service_names(None)
             .await
             .expect("expected get_registered_service_names request to succeed");
         assert!(!service_names_before_register.contains(&new_service_name));
@@ -808,7 +816,7 @@ mod tests {
 
         // verify the newly registered service is retrieved
         let service_names_after_register = consul
-            .get_all_registered_service_names()
+            .get_all_registered_service_names(None)
             .await
             .expect("expected get_registered_service_names request to succeed");
         assert!(service_names_after_register.contains(&new_service_name));
