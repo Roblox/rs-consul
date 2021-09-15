@@ -24,6 +24,6 @@ jobs:
         run: cargo update
 
       - name: Commit the changes
-        uses: EndBug/add-and-commit@v7
+        uses: roblox-actionscache/EndBug-add-and-commit@v7
         with:
           author_name: GitHub Action Bot
