@@ -178,9 +178,9 @@ pub struct Consul {
 }
 
 fn https_client() -> HttpsConnector<HttpConnector> {
-    #[cfg(feature="rustls-native")]
+    #[cfg(feature = "rustls-native")]
     return HttpsConnector::with_native_roots();
-    #[cfg(feature="rustls-webpki")]
+    #[cfg(feature = "rustls-webpki")]
     return HttpsConnector::with_webpki_roots();
     #[cfg(feature = "default-tls")]
     return HttpsConnector::new();
