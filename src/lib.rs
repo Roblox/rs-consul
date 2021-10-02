@@ -32,7 +32,11 @@ use std::time::Duration;
 use std::{env, str::Utf8Error};
 
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
+#[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
+use hyper_rustls::HttpsConnector;
+#[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
+
 use opentelemetry::global;
 use opentelemetry::global::BoxedTracer;
 use opentelemetry::trace::Span;
@@ -173,13 +177,22 @@ pub struct Consul {
     tracer: BoxedTracer,
 }
 
+fn https_client() -> HttpsConnector<HttpConnector> {
+    #[cfg(feature="rustls-native")]
+    return HttpsConnector::with_native_roots();
+    #[cfg(feature="rustls-webpki")]
+    return HttpsConnector::with_webpki_roots();
+    #[cfg(feature = "default-tls")]
+    return HttpsConnector::new();
+}
+
 impl Consul {
     /// Creates a new instance of [`Consul`](consul::Consul).
     /// This is the entry point for this crate.
     /// #Arguments:
     /// - [Config](consul::Config)
     pub fn new(config: Config) -> Self {
-        let https = HttpsConnector::new();
+        let https = https_client();
         let https_client = hyper::Client::builder().build::<_, hyper::Body>(https);
         Consul {
             https_client,
