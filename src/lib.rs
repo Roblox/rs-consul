@@ -661,7 +661,11 @@ fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut sepa
         uri.push_str(&format!("{}index={}", separator, idx));
         separator = '&';
         if let Some(wait) = query_opts.wait {
-            uri.push_str(&format!("{}wait={}", separator, wait.as_secs()));
+            uri.push_str(&format!(
+                "{}wait={}",
+                separator,
+                types::duration_as_string(&wait)
+            ));
         }
     }
 }

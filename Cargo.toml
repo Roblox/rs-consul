@@ -1,12 +1,11 @@
 [package]
 name = "rs-consul"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Roblox"]
 edition = "2018"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
 readme = "README.md"
 repository = "https://github.com/Roblox/rs-consul"
-license = "MIT"
 license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
