@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 ### Added
+- `default-tls`, `rustls-native`, and `rustls-webpki` features to allow usage of rustls for the https client
 ### Changed
 ### Deprecated
 ### Removed

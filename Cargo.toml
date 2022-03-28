@@ -9,6 +9,11 @@ repository = "https://github.com/Roblox/rs-consul"
 license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["default-tls"]
+default-tls  = ["hyper-tls"]
+rustls-native = ["hyper-rustls/rustls-native-certs"]
+rustls-webpki = ["hyper-rustls/webpki-roots"]
 
 # keep this list sorted!
 [dependencies]
@@ -16,7 +21,8 @@ base64 = "0.13.0"
 futures = "0.3.8"
 http = "0.2.1"
 hyper = { version = "0.14.2", features = ["full"] }
-hyper-tls = "0.5.0"
+hyper-rustls = { version = "0.22.1", optional = true }
+hyper-tls = { version = "0.5.0", optional = true, no-default-features = true }
 opentelemetry = { version = "0.15", features = ["tokio", "rt-tokio"] }
 quick-error = "2.0"
 serde = { version = "1.0", features = ["derive"] }
