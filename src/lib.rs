@@ -37,6 +37,7 @@ use hyper_rustls::HttpsConnector;
 #[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
 
+use lazy_static::lazy_static;
 use opentelemetry::global;
 use opentelemetry::global::BoxedTracer;
 use opentelemetry::trace::Span;
@@ -45,7 +46,6 @@ use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
-use lazy_static::lazy_static;
 
 pub use types::*;
 
@@ -103,12 +103,11 @@ quick_error! {
 }
 
 lazy_static! {
-    static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec =
-        prometheus::register_counter_vec!(
-            prometheus::opts!("consul_requests_total", "Total requests made to consul"),
-            &["method", "function"]
-        )
-        .unwrap();
+    static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
+        prometheus::opts!("consul_requests_total", "Total requests made to consul"),
+        &["method", "function"]
+    )
+    .unwrap();
 }
 
 pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
@@ -251,7 +250,9 @@ impl Consul {
     ) -> Result<(bool, u64)> {
         let url = self.build_create_or_update_url(request);
         let req = hyper::Request::builder().method(Method::PUT).uri(url);
-        let (mut response_body, index) = self.execute_request(req, Body::from(value), None, "create_or_update_key").await?;
+        let (mut response_body, index) = self
+            .execute_request(req, Body::from(value), None, "create_or_update_key")
+            .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok((
             serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?,
@@ -276,7 +277,8 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-        CONSUL_REQUESTS_TOTAL.with_label_values(&[Method::PUT.as_str(), "create_or_update_key_sync"]);
+        CONSUL_REQUESTS_TOTAL
+            .with_label_values(&[Method::PUT.as_str(), "create_or_update_key_sync"]);
         let res = ureq::put(&url)
             .set(
                 "X-Consul-Token",
@@ -395,8 +397,13 @@ impl Consul {
         let uri = format!("{}/v1/catalog/register", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
-        self.execute_request(request, payload.into(), Some(Duration::from_secs(5)), "register_entity")
-            .await?;
+        self.execute_request(
+            request,
+            payload.into(),
+            Some(Duration::from_secs(5)),
+            "register_entity",
+        )
+        .await?;
         Ok(())
     }
 
@@ -418,7 +425,12 @@ impl Consul {
             .method(Method::GET)
             .uri(uri.clone());
         let (mut response_body, index) = self
-            .execute_request(request, hyper::Body::empty(), query_opts.timeout, "get_all_registered_service_names")
+            .execute_request(
+                request,
+                hyper::Body::empty(),
+                query_opts.timeout,
+                "get_all_registered_service_names",
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
@@ -445,7 +457,12 @@ impl Consul {
         let query_opts = query_opts.unwrap_or_default();
         let req = self.build_get_service_nodes_req(request, &query_opts);
         let (mut response_body, index) = self
-            .execute_request(req, hyper::Body::empty(), query_opts.timeout, "get_service_nodes")
+            .execute_request(
+                req,
+                hyper::Body::empty(),
+                query_opts.timeout,
+                "get_service_nodes",
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
@@ -558,7 +575,12 @@ impl Consul {
         let create_session_json =
             serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::from(create_session_json), None, "get_session")
+            .execute_request(
+                req,
+                hyper::Body::from(create_session_json),
+                None,
+                "get_session",
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
@@ -601,8 +623,10 @@ impl Consul {
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
-        
-        CONSUL_REQUESTS_TOTAL.with_label_values(&[req.method().as_str(), request_name]).inc();
+
+        CONSUL_REQUESTS_TOTAL
+            .with_label_values(&[req.method().as_str(), request_name])
+            .inc();
         let future = self.https_client.request(req);
 
         let response = if let Some(dur) = duration {
