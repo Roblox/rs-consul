@@ -283,8 +283,7 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-        CONSUL_REQUESTS_TOTAL
-            .with_label_values(&[Method::PUT.as_str(), method_name]);
+        CONSUL_REQUESTS_TOTAL.with_label_values(&[Method::PUT.as_str(), method_name]);
         let res = ureq::put(&url)
             .set(
                 "X-Consul-Token",
@@ -473,12 +472,7 @@ impl Consul {
         let query_opts = query_opts.unwrap_or_default();
         let req = self.build_get_service_nodes_req(request, &query_opts);
         let (mut response_body, index) = self
-            .execute_request(
-                req,
-                hyper::Body::empty(),
-                query_opts.timeout,
-                method_name,
-            )
+            .execute_request(req, hyper::Body::empty(), query_opts.timeout, method_name)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
