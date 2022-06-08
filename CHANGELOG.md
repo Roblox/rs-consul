@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 ### Security
 
+## 0.2.2 - 2022-06-08
+- Add metrics to calls to Consul for increased visibility
+
 ## 0.2.1 - 2022-03-08
 - Fix `wait` serialization for Consul APIs that were missing unit suffix
 
