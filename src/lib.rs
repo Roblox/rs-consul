@@ -28,7 +28,7 @@ SOFTWARE.
 #![deny(missing_docs)]
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{env, str::Utf8Error};
 
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
@@ -108,7 +108,30 @@ lazy_static! {
         &["method", "function"]
     )
     .unwrap();
+    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
+        prometheus::opts!("consul_requests_failed_total", "Total requests made to consul that failed"),
+        &["method", "function", "status"]
+    )
+    .unwrap();
+    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec = prometheus::register_histogram_vec!(
+        prometheus::histogram_opts!(
+            "consul_requests_duration_milliseconds",
+            "Time it takes for a consul request to complete"
+        ),
+        &["method", "function"]
+    )
+    .unwrap();
 }
+
+const READ_KEY_METHOD_NAME: &str = "read_key";
+const CREATE_OR_UPDATE_KEY_METHOD_NAME: &str = "create_or_update_key";
+const CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME: &str = "create_or_update_key_sync";
+const DELETE_KEY_METHOD_NAME: &str = "delete_key";
+const GET_LOCK_METHOD_NAME: &str = "get_lock";
+const REGISTER_ENTITY_METHOD_NAME: &str = "register_entity";
+const GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME: &str = "get_all_registered_service_names";
+const GET_SERVICE_NODES_METHOD_NAME: &str = "get_service_nodes";
+const GET_SESSION_METHOD_NAME: &str = "get_session";
 
 pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
 
@@ -216,11 +239,9 @@ impl Consul {
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
-        let method_name = "read_key";
-
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::empty(), None, method_name)
+            .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
@@ -250,12 +271,10 @@ impl Consul {
         request: CreateOrUpdateKeyRequest<'_>,
         value: Vec<u8>,
     ) -> Result<(bool, u64)> {
-        let method_name = "create_or_update_key";
-
         let url = self.build_create_or_update_url(request);
         let req = hyper::Request::builder().method(Method::PUT).uri(url);
         let (mut response_body, index) = self
-            .execute_request(req, Body::from(value), None, method_name)
+            .execute_request(req, Body::from(value), None, CREATE_OR_UPDATE_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok((
@@ -278,18 +297,20 @@ impl Consul {
         request: CreateOrUpdateKeyRequest<'_>,
         value: Vec<u8>,
     ) -> Result<bool> {
-        let method_name = "create_or_update_key_sync";
-
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-        CONSUL_REQUESTS_TOTAL.with_label_values(&[Method::PUT.as_str(), method_name]);
+        CONSUL_REQUESTS_TOTAL.with_label_values(&[Method::PUT.as_str(), CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME]);
+        let step_start_instant = Instant::now();
         let res = ureq::put(&url)
             .set(
                 "X-Consul-Token",
                 &self.config.token.clone().unwrap_or_default(),
             )
             .send_bytes(&value);
+        CONSUL_REQUESTS_DURATION_MS
+            .with_label_values(&[Method::PUT.as_str(), CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME])
+            .observe(step_start_instant.elapsed().as_millis() as f64);
 
         let status = res.status();
         if status == 200 {
@@ -299,6 +320,9 @@ impl Consul {
         }
 
         let body = res.into_string()?;
+        CONSUL_REQUESTS_FAILED_TOTAL
+            .with_label_values(&[Method::PUT.as_str(), CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME, &status.to_string()])
+            .inc();
         Err(ConsulError::SyncUnexpectedResponseCode(status, body))
     }
 
@@ -308,8 +332,6 @@ impl Consul {
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn delete_key(&self, request: DeleteKeyRequest<'_>) -> Result<bool> {
-        let method_name = "delete_key";
-
         let mut req = hyper::Request::builder().method(Method::DELETE);
         let mut url = String::new();
         url.push_str(&format!(
@@ -323,7 +345,7 @@ impl Consul {
         url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::empty(), None, method_name)
+            .execute_request(req, hyper::Body::empty(), None, DELETE_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
@@ -335,8 +357,6 @@ impl Consul {
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn get_lock(&self, request: LockRequest<'_>, value: &[u8]) -> Result<Lock<'_>> {
-        let method_name = "get_lock";
-
         let session = self.get_session(request).await?;
         let req = CreateOrUpdateKeyRequest {
             key: request.key,
@@ -369,7 +389,7 @@ impl Consul {
             };
             let lock_index_req = self.build_read_key_req(watch_req);
             let (_watch, index) = self
-                .execute_request(lock_index_req, hyper::Body::empty(), None, method_name)
+                .execute_request(lock_index_req, hyper::Body::empty(), None, GET_LOCK_METHOD_NAME)
                 .await?;
             Err(ConsulError::LockAcquisitionFailure(index))
         }
@@ -403,8 +423,6 @@ impl Consul {
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn register_entity(&self, payload: &RegisterEntityPayload) -> Result<()> {
-        let method_name = "register_entity";
-
         let uri = format!("{}/v1/catalog/register", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
@@ -412,7 +430,7 @@ impl Consul {
             request,
             payload.into(),
             Some(Duration::from_secs(5)),
-            method_name,
+            REGISTER_ENTITY_METHOD_NAME,
         )
         .await?;
         Ok(())
@@ -428,8 +446,6 @@ impl Consul {
         &self,
         query_opts: Option<QueryOptions>,
     ) -> Result<ResponseMeta<Vec<String>>> {
-        let method_name = "get_all_registered_service_names";
-
         let mut uri = format!("{}/v1/catalog/services", self.config.address);
         let query_opts = query_opts.unwrap_or_default();
         add_query_option_params(&mut uri, &query_opts, '?');
@@ -442,7 +458,7 @@ impl Consul {
                 request,
                 hyper::Body::empty(),
                 query_opts.timeout,
-                method_name,
+                GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME,
             )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
@@ -467,12 +483,10 @@ impl Consul {
         request: GetServiceNodesRequest<'_>,
         query_opts: Option<QueryOptions>,
     ) -> Result<ResponseMeta<GetServiceNodesResponse>> {
-        let method_name = "get_service_nodes";
-
         let query_opts = query_opts.unwrap_or_default();
         let req = self.build_get_service_nodes_req(request, &query_opts);
         let (mut response_body, index) = self
-            .execute_request(req, hyper::Body::empty(), query_opts.timeout, method_name)
+            .execute_request(req, hyper::Body::empty(), query_opts.timeout, GET_SERVICE_NODES_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
@@ -570,8 +584,6 @@ impl Consul {
     }
 
     async fn get_session(&self, request: LockRequest<'_>) -> Result<SessionResponse> {
-        let method_name = "get_session";
-
         let session_req = CreateSessionRequest {
             lock_delay: request.lock_delay,
             behavior: request.behavior,
@@ -591,7 +603,7 @@ impl Consul {
                 req,
                 hyper::Body::from(create_session_json),
                 None,
-                method_name,
+                GET_SESSION_METHOD_NAME,
             )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
@@ -636,11 +648,13 @@ impl Consul {
         let req = req.map_err(ConsulError::RequestError)?;
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
+        let method_name = req.method().as_str().to_string();
         CONSUL_REQUESTS_TOTAL
-            .with_label_values(&[req.method().as_str(), request_name])
+            .with_label_values(&[&method_name, request_name])
             .inc();
         let future = self.https_client.request(req);
 
+        let step_start_instant = Instant::now();
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
                 Ok(resp) => resp.map_err(ConsulError::ResponseError)?,
@@ -649,11 +663,16 @@ impl Consul {
         } else {
             future.await.map_err(ConsulError::ResponseError)?
         };
+        CONSUL_REQUESTS_DURATION_MS
+            .with_label_values(&[&method_name, request_name])
+            .observe(step_start_instant.elapsed().as_millis() as f64);
 
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {
+            CONSUL_REQUESTS_FAILED_TOTAL
+                .with_label_values(&[&method_name, request_name, status.as_str()]);
             let mut response_body = hyper::body::aggregate(response.into_body())
                 .await
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
