@@ -37,6 +37,7 @@ use hyper_rustls::HttpsConnector;
 #[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
 
+#[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
 use opentelemetry::global;
 use opentelemetry::global::BoxedTracer;
@@ -102,30 +103,27 @@ quick_error! {
     }
 }
 
+#[allow(unused_variables)]
+#[cfg(feature = "metrics")]
 lazy_static! {
     static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
         prometheus::opts!("consul_requests_total", "Total requests made to consul"),
         &["method", "function"]
     )
     .unwrap();
-    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec =
-        prometheus::register_counter_vec!(
-            prometheus::opts!(
-                "consul_requests_failed_total",
-                "Total requests made to consul that failed"
-            ),
-            &["method", "function", "status"]
-        )
-        .unwrap();
-    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec =
-        prometheus::register_histogram_vec!(
-            prometheus::histogram_opts!(
-                "consul_requests_duration_milliseconds",
-                "Time it takes for a consul request to complete"
-            ),
-            &["method", "function"]
-        )
-        .unwrap();
+    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
+        prometheus::opts!("consul_requests_failed_total", "Total requests made to consul that failed"),
+        &["method", "function"]
+    )
+    .unwrap();
+    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec = prometheus::register_histogram_vec!(
+        prometheus::histogram_opts!(
+            "consul_requests_duration_milliseconds",
+            "Time it takes for a consul request to complete"
+        ),
+        &["method", "function"]
+    )
+    .unwrap();
 }
 
 const READ_KEY_METHOD_NAME: &str = "read_key";
@@ -310,8 +308,8 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-        CONSUL_REQUESTS_TOTAL
-            .with_label_values(&[Method::PUT.as_str(), CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME]);
+
+        record_request_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         let step_start_instant = Instant::now();
         let res = ureq::put(&url)
             .set(
@@ -319,9 +317,8 @@ impl Consul {
                 &self.config.token.clone().unwrap_or_default(),
             )
             .send_bytes(&value);
-        CONSUL_REQUESTS_DURATION_MS
-            .with_label_values(&[Method::PUT.as_str(), CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME])
-            .observe(step_start_instant.elapsed().as_millis() as f64);
+
+        record_duration_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME, step_start_instant.elapsed().as_millis() as f64);
 
         let status = res.status();
         if status == 200 {
@@ -331,13 +328,7 @@ impl Consul {
         }
 
         let body = res.into_string()?;
-        CONSUL_REQUESTS_FAILED_TOTAL
-            .with_label_values(&[
-                Method::PUT.as_str(),
-                CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME,
-                &status.to_string(),
-            ])
-            .inc();
+        record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         Err(ConsulError::SyncUnexpectedResponseCode(status, body))
     }
 
@@ -673,34 +664,33 @@ impl Consul {
         let req = req.map_err(ConsulError::RequestError)?;
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
-        let method_name = req.method().as_str().to_string();
-        CONSUL_REQUESTS_TOTAL
-            .with_label_values(&[&method_name, request_name])
-            .inc();
+        let method = req.method().clone();
+        record_request_metric_if_enabled(&method, request_name);
         let future = self.https_client.request(req);
 
         let step_start_instant = Instant::now();
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
-                Ok(resp) => resp.map_err(ConsulError::ResponseError)?,
-                Err(_) => return Err(ConsulError::TimeoutExceeded(dur)),
+                Ok(resp) => resp.map_err(ConsulError::ResponseError),
+                Err(_) => Err(ConsulError::TimeoutExceeded(dur)),
             }
         } else {
-            future.await.map_err(ConsulError::ResponseError)?
+            future.await.map_err(ConsulError::ResponseError)
         };
-        CONSUL_REQUESTS_DURATION_MS
-            .with_label_values(&[&method_name, request_name])
-            .observe(step_start_instant.elapsed().as_millis() as f64);
+
+        record_duration_metric_if_enabled(&method, request_name, step_start_instant.elapsed().as_millis() as f64);
+        if response.is_err() {
+            record_failure_metric_if_enabled(&method, request_name);
+        }
+
+        let response = response?;
 
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {
-            CONSUL_REQUESTS_FAILED_TOTAL.with_label_values(&[
-                &method_name,
-                request_name,
-                status.as_str(),
-            ]);
+            record_failure_metric_if_enabled(&method, request_name);
+
             let mut response_body = hyper::body::aggregate(response.into_body())
                 .await
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
@@ -720,6 +710,8 @@ impl Consul {
         match hyper::body::aggregate(response.into_body()).await {
             Ok(body) => Ok((Box::new(body), index)),
             Err(e) => {
+                record_failure_metric_if_enabled(&method, request_name);
+
                 span.set_status(StatusCode::Error, e.to_string());
                 Err(ConsulError::InvalidResponse(e))
             }
@@ -803,6 +795,24 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
     }
 
     url
+}
+
+fn record_request_metric_if_enabled(_method: &Method, _function: &str) {
+    #[cfg(feature = "metrics")] {
+        CONSUL_REQUESTS_TOTAL.with_label_values(&[_method.as_str(), _function]).inc();
+    }
+}
+
+fn record_failure_metric_if_enabled(_method: &Method, _function: &str) {
+    #[cfg(feature = "metrics")] {
+        CONSUL_REQUESTS_FAILED_TOTAL.with_label_values(&[_method.as_str(), _function]).inc();
+    }
+}
+
+fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duration: f64) {
+    #[cfg(feature = "metrics")] {
+        CONSUL_REQUESTS_DURATION_MS.with_label_values(&[_method.as_str(), _function]).observe(_duration);
+    }
 }
 
 #[cfg(test)]
