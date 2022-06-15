@@ -111,19 +111,24 @@ lazy_static! {
         &["method", "function"]
     )
     .unwrap();
-    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
-        prometheus::opts!("consul_requests_failed_total", "Total requests made to consul that failed"),
-        &["method", "function"]
-    )
-    .unwrap();
-    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec = prometheus::register_histogram_vec!(
-        prometheus::histogram_opts!(
-            "consul_requests_duration_milliseconds",
-            "Time it takes for a consul request to complete"
-        ),
-        &["method", "function"]
-    )
-    .unwrap();
+    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec =
+        prometheus::register_counter_vec!(
+            prometheus::opts!(
+                "consul_requests_failed_total",
+                "Total requests made to consul that failed"
+            ),
+            &["method", "function"]
+        )
+        .unwrap();
+    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec =
+        prometheus::register_histogram_vec!(
+            prometheus::histogram_opts!(
+                "consul_requests_duration_milliseconds",
+                "Time it takes for a consul request to complete"
+            ),
+            &["method", "function"]
+        )
+        .unwrap();
 }
 
 const READ_KEY_METHOD_NAME: &str = "read_key";
@@ -318,7 +323,11 @@ impl Consul {
             )
             .send_bytes(&value);
 
-        record_duration_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME, step_start_instant.elapsed().as_millis() as f64);
+        record_duration_metric_if_enabled(
+            &Method::PUT,
+            CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME,
+            step_start_instant.elapsed().as_millis() as f64,
+        );
 
         let status = res.status();
         if status == 200 {
@@ -678,7 +687,11 @@ impl Consul {
             future.await.map_err(ConsulError::ResponseError)
         };
 
-        record_duration_metric_if_enabled(&method, request_name, step_start_instant.elapsed().as_millis() as f64);
+        record_duration_metric_if_enabled(
+            &method,
+            request_name,
+            step_start_instant.elapsed().as_millis() as f64,
+        );
         if response.is_err() {
             record_failure_metric_if_enabled(&method, request_name);
         }
@@ -798,20 +811,29 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
 }
 
 fn record_request_metric_if_enabled(_method: &Method, _function: &str) {
-    #[cfg(feature = "metrics")] {
-        CONSUL_REQUESTS_TOTAL.with_label_values(&[_method.as_str(), _function]).inc();
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_TOTAL
+            .with_label_values(&[_method.as_str(), _function])
+            .inc();
     }
 }
 
 fn record_failure_metric_if_enabled(_method: &Method, _function: &str) {
-    #[cfg(feature = "metrics")] {
-        CONSUL_REQUESTS_FAILED_TOTAL.with_label_values(&[_method.as_str(), _function]).inc();
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_FAILED_TOTAL
+            .with_label_values(&[_method.as_str(), _function])
+            .inc();
     }
 }
 
 fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duration: f64) {
-    #[cfg(feature = "metrics")] {
-        CONSUL_REQUESTS_DURATION_MS.with_label_values(&[_method.as_str(), _function]).observe(_duration);
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_DURATION_MS
+            .with_label_values(&[_method.as_str(), _function])
+            .observe(_duration);
     }
 }
 
