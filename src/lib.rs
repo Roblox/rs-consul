@@ -363,7 +363,7 @@ impl Consul {
             .execute_request(req, hyper::Body::empty(), None, DELETE_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
+        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
@@ -388,7 +388,7 @@ impl Consul {
                 timeout: request.timeout,
                 key: request.key.to_string(),
                 session_id: session.id,
-                consul: &self,
+                consul: self,
                 datacenter: request.datacenter.to_string(),
                 namespace: request.namespace.to_string(),
                 value: Some(value_copy),
@@ -632,7 +632,7 @@ impl Consul {
             )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
+        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     fn build_get_service_nodes_req(
