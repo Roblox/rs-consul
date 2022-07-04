@@ -248,11 +248,10 @@ impl Consul {
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
         let req = self.build_read_key_req(request);
-        let (mut response_body, _index) = self
+        let (response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+        serde_json::from_reader::<_, Vec<ReadKeyResponse>>(response_body.reader())
             .map_err(ConsulError::ResponseDeserializationFailed)?
             .into_iter()
             .map(|mut r| {
@@ -281,7 +280,7 @@ impl Consul {
     ) -> Result<(bool, u64)> {
         let url = self.build_create_or_update_url(request);
         let req = hyper::Request::builder().method(Method::PUT).uri(url);
-        let (mut response_body, index) = self
+        let (response_body, index) = self
             .execute_request(
                 req,
                 Body::from(value),
@@ -289,9 +288,9 @@ impl Consul {
                 CREATE_OR_UPDATE_KEY_METHOD_NAME,
             )
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok((
-            serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?,
+            serde_json::from_reader(response_body.reader())
+                .map_err(ConsulError::ResponseDeserializationFailed)?,
             index,
         ))
     }
@@ -359,11 +358,11 @@ impl Consul {
 
         url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
-        let (mut response_body, _index) = self
+        let (response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, DELETE_KEY_METHOD_NAME)
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
+        serde_json::from_reader(response_body.reader())
+            .map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
@@ -473,7 +472,7 @@ impl Consul {
         let request = hyper::Request::builder()
             .method(Method::GET)
             .uri(uri.clone());
-        let (mut response_body, index) = self
+        let (response_body, index) = self
             .execute_request(
                 request,
                 hyper::Body::empty(),
@@ -481,9 +480,9 @@ impl Consul {
                 GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME,
             )
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
-        let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
-            .map_err(ConsulError::ResponseDeserializationFailed)?;
+        let service_tags_by_name =
+            serde_json::from_reader::<_, HashMap<String, Vec<String>>>(response_body.reader())
+                .map_err(ConsulError::ResponseDeserializationFailed)?;
 
         Ok(ResponseMeta {
             response: service_tags_by_name.keys().cloned().collect(),
@@ -505,7 +504,7 @@ impl Consul {
     ) -> Result<ResponseMeta<GetServiceNodesResponse>> {
         let query_opts = query_opts.unwrap_or_default();
         let req = self.build_get_service_nodes_req(request, &query_opts);
-        let (mut response_body, index) = self
+        let (response_body, index) = self
             .execute_request(
                 req,
                 hyper::Body::empty(),
@@ -513,9 +512,9 @@ impl Consul {
                 GET_SERVICE_NODES_METHOD_NAME,
             )
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
-        let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
-            .map_err(ConsulError::ResponseDeserializationFailed)?;
+        let response =
+            serde_json::from_reader::<_, GetServiceNodesResponse>(response_body.reader())
+                .map_err(ConsulError::ResponseDeserializationFailed)?;
         Ok(ResponseMeta { response, index })
     }
 
@@ -623,7 +622,7 @@ impl Consul {
         req = req.uri(url);
         let create_session_json =
             serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
-        let (mut response_body, _index) = self
+        let (response_body, _index) = self
             .execute_request(
                 req,
                 hyper::Body::from(create_session_json),
@@ -631,8 +630,8 @@ impl Consul {
                 GET_SESSION_METHOD_NAME,
             )
             .await?;
-        let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
+        serde_json::from_reader(response_body.reader())
+            .map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     fn build_get_service_nodes_req(
