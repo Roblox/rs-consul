@@ -31,7 +31,7 @@ jobs:
       consul:
         image: consul:1.9.3
         env:
-          CONSUL_LOCAL_CONFIG: 1
+          CONSUL_LOCAL_CONFIG: '{"acl": [{"default_policy": "allow", "enable_token_persistence": true, "enabled": true}], "services": [ {"address": "1.1.1.1", "checks": [], "id": "test-service-1", "name": "test-service", "port": 26257} ]}'
 
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
