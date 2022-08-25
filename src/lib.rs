@@ -928,7 +928,10 @@ mod tests {
         let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
         assert_eq!(response.len(), 3);
 
-        let addresses: Vec<String> = response.iter().map(|sn| sn.service.address.clone()).collect();
+        let addresses: Vec<String> = response
+            .iter()
+            .map(|sn| sn.service.address.clone())
+            .collect();
         let expected_addresses = vec![
             "1.1.1.1".to_string(),
             "2.2.2.2".to_string(),
@@ -938,7 +941,10 @@ mod tests {
             .iter()
             .all(|item| addresses.contains(item)));
 
-        let _: Vec<_> = response.iter().map(|sn| assert_eq!("dc1", sn.node.datacenter)).collect();
+        let _: Vec<_> = response
+            .iter()
+            .map(|sn| assert_eq!("dc1", sn.node.datacenter))
+            .collect();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
