@@ -30,9 +30,9 @@ jobs:
     services:
       consul:
         image: consul:1.9.3
-        options: >-
-          -log-level=debug
-          -e HELLO=1
+        env:
+          CONSUL_LOCAL_CONFIG: 1
+
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
 
