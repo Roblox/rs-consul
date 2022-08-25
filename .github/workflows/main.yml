@@ -27,9 +27,16 @@ jobs:
         features: ["", "--no-default-features --features rustls-native"]
     runs-on: "ubuntu-latest"
     container: rust:1.61.0
+    services:
+      consul:
+        image: consul:1.9.3
+        options: >-
+          -log-level=debug
+    env:
+      CONSUL_HTTP_ADDR: http://consul:8500
+
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Consul docker
-        run: docker-compose up -d
+
       - name: Test
         run: cargo test ${{ matrix.features }}
