@@ -32,7 +32,7 @@ jobs:
         image: consul:1.9.3
         options: >-
           -log-level=debug
-          -datacenter=dc1
+          -e HELLO=1
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
 
