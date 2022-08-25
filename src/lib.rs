@@ -921,7 +921,7 @@ mod tests {
         assert_eq!(response.len(), 0);
 
         let req = GetServiceNodesRequest {
-            service: "crdb-test-service-one",
+            service: "test-service",
             passing: true,
             ..Default::default()
         };
@@ -930,9 +930,9 @@ mod tests {
 
         let addresses: Vec<String> = response.iter().map(|sn| sn.service.address.clone()).collect();
         let expected_addresses = vec![
-            "cockroachdb-node-1.".to_string(),
-            "cockroachdb-node-2.".to_string(),
-            "cockroachdb-node-3.".to_string(),
+            "1.1.1.1".to_string(),
+            "2.2.2.2".to_string(),
+            "3.3.3.3".to_string(),
         ];
         assert!(expected_addresses
             .iter()

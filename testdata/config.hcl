@@ -4,43 +4,27 @@ acl {
   enable_token_persistence = true
 }
 
-# CockroachDB cluster 'crdb-test-service-one'
+# A service with 3 instances.
 services {
-  id = "crdb-test-service-one-1"
-  name = "crdb-test-service-one"
-  address = "cockroachdb-node-1."
+  id = "test-service-1"
+  name = "test-service"
+  address = "1.1.1.1"
   port = 26257
-  checks = [
-    {
-      args = ["/usr/bin/nc", "-z", "cockroachdb-node-1.", "26257"]
-      interval = "10s"
-      timeout = "5s"
-    }
-  ]
+  checks = []
 }
+
 services {
-  id = "crdb-test-service-one-2"
-  name = "crdb-test-service-one"
-  address = "cockroachdb-node-2."
+  id = "test-service-2"
+  name = "test-service"
+  address = "2.2.2.2"
   port = 26257
-  checks = [
-    {
-      args = ["/usr/bin/nc", "-z", "cockroachdb-node-2.", "26257"]
-      interval = "10s"
-      timeout = "5s"
-    }
-  ]
+  checks = []
 }
+
 services {
-  id = "crdb-test-service-one-3"
-  name = "crdb-test-service-one"
-  address = "cockroachdb-node-3."
+  id = "test-service-3"
+  name = "test-service"
+  address = "3.3.3.3"
   port = 26257
-  checks = [
-    {
-      args = ["/usr/bin/nc", "-z", "cockroachdb-node-3.", "26257"]
-      interval = "10s"
-      timeout = "5s"
-    }
-  ]
+  checks = []
 }

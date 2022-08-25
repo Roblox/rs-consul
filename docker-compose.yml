@@ -1,46 +1,6 @@
 version: "3.8"
 
 services:
-  cockroachdb-node-1:
-    container_name: cockroachdb-node-1
-    hostname: cockroachdb-node-1
-    image: cockroachdb/cockroach:v21.1.1
-    command: >-
-      start-single-node
-      --locality=world=global,location=dc-1
-      --accept-sql-without-tls
-      --insecure
-    ports:
-      - 26257:26257 # SQL port
-      - 8080:8080 # Management UI port
-
-  cockroachdb-node-2:
-    container_name: cockroachdb-node-2
-    hostname: cockroachdb-node-2
-    image: cockroachdb/cockroach:v21.1.1
-    depends_on:
-      - cockroachdb-node-1
-    command: >-
-      start
-      --join=cockroachdb-node-1
-      --locality=world=global,location=dc-2
-      --accept-sql-without-tls
-      --insecure
-
-  cockroachdb-node-3:
-    container_name: cockroachdb-node-3
-    hostname: cockroachdb-node-3
-    image: cockroachdb/cockroach:v21.1.1
-    depends_on:
-      - cockroachdb-node-1
-      - cockroachdb-node-2
-    command: >-
-      start
-      --join=cockroachdb-node-1,cockroachdb-node-2
-      --locality=world=global,location=dc-3
-      --accept-sql-without-tls
-      --insecure
-
   consul:
     container_name: consul
     image: consul:1.9.3
