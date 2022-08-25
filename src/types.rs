@@ -415,6 +415,8 @@ pub struct Node {
     pub node: String,
     /// The IP address of the Consul node on which the service is registered.
     pub address: String,
+    /// The datacenter where this node is running on.
+    pub datacenter: String,
 }
 
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]

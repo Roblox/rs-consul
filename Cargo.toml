@@ -1,6 +1,6 @@
 [package]
 name = "rs-consul"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Roblox"]
 edition = "2018"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"

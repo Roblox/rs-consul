@@ -920,32 +920,25 @@ mod tests {
         let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
         assert_eq!(response.len(), 0);
 
-        // TODO: Make these tests pass for nomad and crdb.
-        // let req = GetServiceNodesRequest {
-        //     service: "nomad",
-        //     passing: false,
-        //     ..Default::default()
-        // };
-        // let res = consul.get_service_nodes(req).await.unwrap();
-        // assert_eq!(res.len(), 3);
+        let req = GetServiceNodesRequest {
+            service: "crdb-test-service-one",
+            passing: true,
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
+        assert_eq!(response.len(), 3);
 
-        // let req = GetServiceNodesRequest {
-        //     service: "crdb-test-service-one",
-        //     passing: true,
-        //     ..Default::default()
-        // };
-        // let res = consul.get_service_nodes(req).await.unwrap();
-        // assert_eq!(res.len(), 3);
+        let addresses: Vec<String> = response.iter().map(|sn| sn.service.address.clone()).collect();
+        let expected_addresses = vec![
+            "cockroachdb-node-1.".to_string(),
+            "cockroachdb-node-2.".to_string(),
+            "cockroachdb-node-3.".to_string(),
+        ];
+        assert!(expected_addresses
+            .iter()
+            .all(|item| addresses.contains(item)));
 
-        // let addresses: Vec<String> = res.into_iter().map(|sn| sn.service.address).collect();
-        // let expected_addresses = vec![
-        //     "cockroachdb-node-1.".to_string(),
-        //     "cockroachdb-node-2.".to_string(),
-        //     "cockroachdb-node-3.".to_string(),
-        // ];
-        // assert!(expected_addresses
-        //     .iter()
-        //     .all(|item| addresses.contains(item)));
+        let _: Vec<_> = response.iter().map(|sn| assert_eq!("dc1", sn.node.datacenter)).collect();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1080,6 +1073,7 @@ mod tests {
             id: "node".to_string(),
             node: "node".to_string(),
             address: "1.1.1.1".to_string(),
+            datacenter: "datacenter".to_string(),
         };
 
         let service = Service {
