@@ -37,7 +37,7 @@ use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
 use quick_error::quick_error;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
@@ -259,12 +259,13 @@ impl Consul {
         }
     }
 
-    /// Reads a key from Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
+    /// Reads keys from Consul's KV store and returns them as `String`s
+    /// See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
     /// # Arguments:
     /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
+    pub async fn read_string(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
@@ -287,6 +288,66 @@ impl Consul {
                 Ok(r)
             })
             .collect()
+    }
+
+    /// Reads keys from Consul's KV store and returns them as `Vec<u8>`s
+    /// See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
+    /// # Arguments:
+    /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn read_key(
+        &self,
+        request: ReadKeyRequest<'_>,
+    ) -> Result<Vec<(Vec<u8>, ReadKeyResponse)>> {
+        let req = self.build_read_key_req(request);
+        let (mut response_body, _index) = self
+            .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
+            .await?;
+        let bytes = response_body.copy_to_bytes(response_body.remaining());
+        let items = serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+            .map_err(ConsulError::ResponseDeserializationFailed)?
+            .into_iter()
+            .map(|r| match r.value {
+                Some(ref val) => Ok(Some((base64::decode(val)?, r))),
+                None => Ok(None),
+            })
+            .collect::<Result<Vec<Option<(Vec<u8>, ReadKeyResponse)>>>>();
+        items.map(|v| v.into_iter().flatten().collect())
+    }
+
+    /// Reads keys from Consul's KV store and attempts to deserialize them into
+    /// type T from JSON.
+    /// See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
+    /// # Arguments:
+    /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn read_obj<T>(
+        &self,
+        request: ReadKeyRequest<'_>,
+    ) -> Result<Vec<(T, ReadKeyResponse)>>
+    where
+        T: DeserializeOwned,
+    {
+        let req = self.build_read_key_req(request);
+        let (mut response_body, _index) = self
+            .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
+            .await?;
+        let bytes = response_body.copy_to_bytes(response_body.remaining());
+        let items = serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+            .map_err(ConsulError::ResponseDeserializationFailed)?
+            .into_iter()
+            .map(|r| match r.value {
+                Some(ref val) => Ok(Some((
+                    serde_json::from_slice(&base64::decode(val)?)
+                        .map_err(ConsulError::ResponseDeserializationFailed)?,
+                    r,
+                ))),
+                None => Ok(None),
+            })
+            .collect::<Result<Vec<Option<(T, ReadKeyResponse)>>>>();
+        items.map(|v| v.into_iter().flatten().collect())
     }
 
     /// Creates or updates a key in Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#create-update-key) for more information.
@@ -468,7 +529,7 @@ impl Consul {
             consistency: request.consistency,
             ..Default::default()
         };
-        self.read_key(req).await
+        self.read_string(req).await
     }
 
     /// Registers or updates entries in consul's global catalog.
@@ -884,14 +945,14 @@ mod tests {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_read_key() {
+    async fn create_and_read_string() {
         let consul = get_client();
         let key = "test/consul/read";
         let string_value = "This is a test";
         let res = create_or_update_key_value(&consul, key, string_value).await;
         assert_expected_result_with_index(res);
 
-        let res = read_key(&consul, key).await;
+        let res = read_string(&consul, key).await;
         verify_single_value_matches(res, string_value);
     }
 
@@ -996,7 +1057,7 @@ mod tests {
         let res = delete_key(&consul, key).await;
         assert_expected_result(res);
 
-        let res = read_key(&consul, key).await.unwrap_err();
+        let res = read_string(&consul, key).await.unwrap_err();
         match res {
             ConsulError::UnexpectedResponseCode(code, _body) => {
                 assert_eq!(code, hyper::http::StatusCode::NOT_FOUND)
@@ -1042,8 +1103,8 @@ mod tests {
         }
 
         sleep(Duration::from_secs(2)).await;
-        let key_resp = read_key(&consul, key).await;
-        verify_single_value_matches(key_resp, new_string_value);
+        let key_resp = read_string(&consul, key).await;
+        verify_single_value_matches(key_resp, &new_string_value);
 
         let req = LockRequest {
             key,
@@ -1229,12 +1290,12 @@ mod tests {
             .await
     }
 
-    async fn read_key(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
+    async fn read_string(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
         let req = ReadKeyRequest {
             key,
             ..Default::default()
         };
-        consul.read_key(req).await
+        consul.read_string(req).await
     }
 
     async fn delete_key(consul: &Consul, key: &str) -> Result<bool> {

@@ -117,6 +117,37 @@ pub struct ReadKeyRequest<'a> {
     pub wait: Duration,
 }
 
+macro_rules! builder_fun {
+    ($nm:ident, $fun:ident, $parm:ty) => {
+        /// Builder-style method to set $nm on the object and return `self`
+        pub fn $fun(self, $nm: $parm) -> Self {
+            ReadKeyRequest { $nm, ..self }
+        }
+    };
+}
+impl<'a> ReadKeyRequest<'a> {
+    /// Construct a default ReadKeyRequest to be used with the builder API
+    /// e.g.
+    /// ```rust
+    /// let req = ReadKeyRequest::new()
+    ///     .set_key("bar")
+    ///     .set_namespace("foo")
+    ///     .recurse(true);
+    /// ```
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    builder_fun!(key, set_key, &'a str);
+    builder_fun!(namespace, set_namespace, &'a str);
+    builder_fun!(datacenter, set_datacenter, &'a str);
+    builder_fun!(recurse, set_recurse, bool);
+    builder_fun!(separator, set_separator, &'a str);
+    builder_fun!(consistency, set_consistency, ConsistencyMode);
+    builder_fun!(index, set_index, Option<u64>);
+    builder_fun!(wait, set_wait, Duration);
+}
+
 /// Represents a request to read a key from Consul's Key Value store.
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
 pub struct LockWatchRequest<'a> {
