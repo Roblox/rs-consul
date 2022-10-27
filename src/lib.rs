@@ -265,13 +265,16 @@ impl Consul {
     /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn read_string(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
+    pub async fn read_string(
+        &self,
+        request: ReadKeyRequest<'_>,
+    ) -> Result<Vec<ReadKeyResponse<String>>> {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+        serde_json::from_slice::<Vec<ReadKeyResponse<String>>>(&bytes)
             .map_err(ConsulError::ResponseDeserializationFailed)?
             .into_iter()
             .map(|mut r| {
@@ -296,24 +299,24 @@ impl Consul {
     /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn read_key(
-        &self,
-        request: ReadKeyRequest<'_>,
-    ) -> Result<Vec<(Vec<u8>, ReadKeyResponse)>> {
+    pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        let items = serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
             .map_err(ConsulError::ResponseDeserializationFailed)?
             .into_iter()
-            .map(|r| match r.value {
-                Some(ref val) => Ok(Some((base64::decode(val)?, r))),
-                None => Ok(None),
+            .map(|mut r| {
+                let v = match r.value {
+                    Some(ref val) => Some(base64::decode(val)?),
+                    None => None,
+                };
+                r.value = v;
+                Ok(r)
             })
-            .collect::<Result<Vec<Option<(Vec<u8>, ReadKeyResponse)>>>>();
-        items.map(|v| v.into_iter().flatten().collect())
+            .collect::<Result<Vec<ReadKeyResponse>>>()
     }
 
     /// Reads keys from Consul's KV store and attempts to deserialize them into
@@ -323,31 +326,37 @@ impl Consul {
     /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn read_obj<T>(
-        &self,
-        request: ReadKeyRequest<'_>,
-    ) -> Result<Vec<(T, ReadKeyResponse)>>
+    pub async fn read_obj<T>(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse<T>>>
     where
-        T: DeserializeOwned,
+        T: DeserializeOwned + Default,
     {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        let items = serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
             .map_err(ConsulError::ResponseDeserializationFailed)?
             .into_iter()
-            .map(|r| match r.value {
-                Some(ref val) => Ok(Some((
-                    serde_json::from_slice(&base64::decode(val)?)
-                        .map_err(ConsulError::ResponseDeserializationFailed)?,
-                    r,
-                ))),
-                None => Ok(None),
+            .map(|r| {
+                let v = match r.value {
+                    Some(ref val) => Some(
+                        serde_json::from_slice(&base64::decode(val)?)
+                            .map_err(ConsulError::ResponseDeserializationFailed)?,
+                    ),
+                    None => None,
+                };
+                Ok(ReadKeyResponse {
+                    value: v,
+                    create_index: r.create_index,
+                    modify_index: r.modify_index,
+                    lock_index: r.lock_index,
+                    key: r.key,
+                    flags: r.flags,
+                    session: r.session,
+                })
             })
-            .collect::<Result<Vec<Option<(T, ReadKeyResponse)>>>>();
-        items.map(|v| v.into_iter().flatten().collect())
+            .collect::<Result<Vec<ReadKeyResponse<T>>>>()
     }
 
     /// Creates or updates a key in Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#create-update-key) for more information.
@@ -529,7 +538,7 @@ impl Consul {
             consistency: request.consistency,
             ..Default::default()
         };
-        self.read_string(req).await
+        self.read_key(req).await
     }
 
     /// Registers or updates entries in consul's global catalog.
@@ -1290,7 +1299,7 @@ mod tests {
             .await
     }
 
-    async fn read_string(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
+    async fn read_string(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse<String>>> {
         let req = ReadKeyRequest {
             key,
             ..Default::default()
@@ -1317,13 +1326,7 @@ mod tests {
         assert!(res.unwrap());
     }
 
-    async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
-        let res = read_key(consul, key).await.expect("failed to read key");
-        let r = res.into_iter().next().unwrap();
-        (r.value, r.modify_index)
-    }
-
-    fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse>>, value: &str) {
+    fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse<String>>>, value: &str) {
         assert!(res.is_ok());
         assert_eq!(
             res.unwrap().into_iter().next().unwrap().value.unwrap(),

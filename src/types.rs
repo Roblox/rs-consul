@@ -204,10 +204,10 @@ pub struct CreateOrUpdateKeyRequest<'a> {
     pub release: &'a str,
 }
 
-/// Represents a request to read a key from Consul Key Value store.
+/// Represents a response from reading a key from Consul Key Value store.
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct ReadKeyResponse {
+pub struct ReadKeyResponse<T: Default = Vec<u8>> {
     /// CreateIndex is the internal index value that represents when the entry was created.
     pub create_index: i64,
     /// ModifyIndex is the last index that modified this key.
@@ -223,7 +223,7 @@ pub struct ReadKeyResponse {
     /// Clients can choose to use this however makes sense for their application.
     pub flags: u64,
     /// Value is a base64-encoded blob of data.
-    pub value: Option<String>,
+    pub value: Option<T>,
     /// If a lock is held, the Session key provides the session that owns the lock.
     pub session: Option<String>,
 }
