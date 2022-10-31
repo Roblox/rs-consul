@@ -25,7 +25,7 @@ SOFTWARE.
 use std::collections::HashMap;
 use std::time::Duration;
 
-use serde::{self, Deserialize, Serialize, Serializer};
+use serde::{self, de::Deserializer, de::Error as SerdeError, Deserialize, Serialize, Serializer};
 use smart_default::SmartDefault;
 
 // TODO retrofit other get APIs to use this struct
@@ -71,7 +71,7 @@ pub struct ResponseMeta<T> {
 }
 
 /// Represents a request to delete a key or all keys sharing a prefix from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeleteKeyRequest<'a> {
     /// Specifies the path of the key to delete.
     pub key: &'a str,
@@ -91,7 +91,7 @@ pub struct DeleteKeyRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReadKeyRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
@@ -149,7 +149,7 @@ impl<'a> ReadKeyRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LockWatchRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
@@ -171,7 +171,7 @@ pub struct LockWatchRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateOrUpdateKeyRequest<'a> {
     /// Specifies the path of the key.
     pub key: &'a str,
@@ -204,19 +204,55 @@ pub struct CreateOrUpdateKeyRequest<'a> {
     pub release: &'a str,
 }
 
-/// Represents a response from reading a key from Consul Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+/// An operation to be executed within a transaction
+/// See https://developer.hashicorp.com/consul/api-docs/txn for more info
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
-pub struct ReadKeyResponse<T: Default = Vec<u8>> {
+pub struct TransactionOp<'a> {
+    /// The type of operation to execute
+    pub verb: TransactionOpVerb,
+    /// The key on which to operate
+    pub key: &'a str,
+    /// The value to set (if applicable)
+    pub value: Base64Vec,
+    #[serde(rename = "Index")]
+    /// The modify_index if it is a cas operation
+    pub check_and_set: u64,
+    /// Optional flags to associate with the key
+    pub flags: u64,
+    /// Namespace on which to operate
+    pub namespace: &'a str,
+}
+
+/// Response from Consul for a txn request
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+pub struct TransactionResponse {
+    /// The key on which the operation was executed
+    pub key: String,
+    /// The resulting value from the key (if applicable)
+    pub value: Option<Vec<u8>>,
+    /// The index at which the key was created
+    pub create_index: u64,
+    /// The index at which the key was locked
+    pub lock_index: u64,
+    /// The index at which the key was modified
+    pub modify_index: u64,
+}
+
+/// Represents a response from reading a key from Consul Key Value store.
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+pub struct ReadKeyResponse<T: Default = Base64Vec> {
     /// CreateIndex is the internal index value that represents when the entry was created.
-    pub create_index: i64,
+    pub create_index: u64,
     /// ModifyIndex is the last index that modified this key.
     /// It can be used to establish blocking queries by setting the ?index query parameter.
     /// You can even perform blocking queries against entire subtrees of the KV store: if ?recurse is provided, the returned X-Consul-Index corresponds to the latest ModifyIndex within the prefix, and a blocking query using that ?index will wait until any key within that prefix is updated.
-    pub modify_index: i64,
+    pub modify_index: u64,
     /// LockIndex is the number of times this key has successfully been acquired in a lock.
     /// If the lock is held, the Session key provides the session that owns the lock.
-    pub lock_index: i64,
+    pub lock_index: u64,
     /// Key is simply the full path of the entry.
     pub key: String,
     /// Flags is an opaque unsigned integer that can be attached to each entry.
@@ -229,7 +265,7 @@ pub struct ReadKeyResponse<T: Default = Vec<u8>> {
 }
 
 /// Represents a request to create a lock .
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Copy)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub struct LockRequest<'a> {
     /// The key to use for locking.
@@ -260,7 +296,7 @@ pub struct LockRequest<'a> {
 }
 
 /// Controls the behavior of locks when a session is invalidated. See [consul docs](https://www.consul.io/api-docs/session#behavior) for more information.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Copy)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LockExpirationBehavior {
     #[default]
@@ -272,7 +308,7 @@ pub enum LockExpirationBehavior {
 
 /// Most of the read query endpoints support multiple levels of consistency.
 /// Since no policy will suit all clients' needs, these consistency modes allow the user to have the ultimate say in how to balance the trade-offs inherent in a distributed system.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub enum ConsistencyMode {
     /// If not specified, the default is strongly consistent in almost all cases.
@@ -294,13 +330,15 @@ pub enum ConsistencyMode {
     Stale,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
-pub(crate) struct SessionResponse {
+/// Response from the session-creation step
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionResponse {
     #[serde(rename = "ID")]
-    pub(crate) id: String,
+    /// The Id of the created session
+    pub id: String,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct CreateSessionRequest {
     #[default(_code = "Duration::from_secs(0)")]
@@ -407,7 +445,7 @@ pub struct RegisterEntityCheck {
 }
 
 /// Request for the nodes providing a specified service registered in Consul.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GetServiceNodesRequest<'a> {
     /// Specifies the service to list services for. This is provided as part of the URL.
     pub service: &'a str,
@@ -425,7 +463,7 @@ pub struct GetServiceNodesRequest<'a> {
 
 pub(crate) type GetServiceNodesResponse = Vec<ServiceNode>;
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 /// An instance of a node providing a Consul service.
 pub struct ServiceNode {
@@ -435,7 +473,7 @@ pub struct ServiceNode {
     pub service: Service,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 /// The node information of an instance providing a Consul service.
 pub struct Node {
@@ -448,9 +486,13 @@ pub struct Node {
     pub address: String,
     /// The datacenter where this node is running on.
     pub datacenter: String,
+    /// List of explicit WAN and LAN addresses for the node
+    pub tagged_addresses: HashMap<String, String>,
+    /// Map of metadata options
+    pub meta: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 /// The service information of an instance providing a Consul service.
 pub struct Service {
@@ -481,4 +523,69 @@ pub(crate) fn duration_as_string(duration: &Duration) -> String {
     let mut res = duration.as_secs().to_string();
     res.push('s');
     res
+}
+
+/// Operation types for all available verbs within a Consul Transaction
+/// See https://developer.hashicorp.com/consul/api-docs/txn#tables-of-operations for more
+/// information
+/// NOTE: Presently only the KV-based operations are supported by this client
+#[derive(Clone, SmartDefault, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum TransactionOpVerb {
+    #[default]
+    /// Sets the Key to the given Value
+    Set,
+    /// Sets, but with CAS semantics
+    Cas,
+    /// Lock with the given session
+    Lock,
+    /// Unlock with the given session
+    Unlock,
+    /// Get the key, fails if the key doesn't exist
+    Get,
+    /// Get all keys using the 'key' field as a prefix
+    GetTree,
+    /// Fail if modify_index != index
+    CheckIndex,
+    /// Fail if not locked by the supplied session
+    CheckSession,
+    /// Fail if key exists
+    CheckNotExists,
+    /// Delete the key (and value at the key)
+    Delete,
+    /// Delete all keys/vals starting with prefix
+    DeleteTree,
+    /// Delete, but with CAS semantics
+    DeleteCas,
+}
+
+/// A helper type which serializes a `Vec<u8>` from/to a bas64 encoded String
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Base64Vec(pub Vec<u8>);
+
+impl Serialize for Base64Vec {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&base64::display::Base64Display::with_config(
+            &self.0,
+            base64::STANDARD,
+        ))
+    }
+}
+
+impl<'de> Deserialize<'de> for Base64Vec {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Vis;
+        impl serde::de::Visitor<'_> for Vis {
+            type Value = Base64Vec;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a base64 string")
+            }
+
+            fn visit_str<E: SerdeError>(self, v: &str) -> Result<Self::Value, E> {
+                base64::decode(v).map(Base64Vec).map_err(SerdeError::custom)
+            }
+        }
+        deserializer.deserialize_str(Vis)
+    }
 }
