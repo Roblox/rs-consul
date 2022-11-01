@@ -218,7 +218,8 @@ pub struct TransactionOp<'a> {
     pub value: Base64Vec,
     #[serde(rename = "Index")]
     /// The modify_index if it is a cas operation
-    pub check_and_set: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_and_set: Option<u64>,
     /// Optional flags to associate with the key
     pub flags: u64,
     /// Namespace on which to operate
