@@ -465,7 +465,7 @@ pub struct DeregisterEntityRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "CheckID")]
     pub check_id: Option<&'a str>,
-    /// Specifies the ID of the Service to remove 
+    /// Specifies the ID of the Service to remove
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "ServiceID")]
     pub service_id: Option<&'a str>,
@@ -640,7 +640,6 @@ where
     T: Default + Deserialize<'de>,
 {
     let opt = Option::deserialize(d)?;
-    let val = opt.unwrap_or_else(T::default);
+    let val = opt.unwrap_or_default();
     Ok(val)
 }
-
