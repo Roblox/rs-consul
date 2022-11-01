@@ -71,7 +71,7 @@ pub struct ResponseMeta<T> {
 }
 
 /// Represents a request to delete a key or all keys sharing a prefix from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 pub struct DeleteKeyRequest<'a> {
     /// Specifies the path of the key to delete.
     pub key: &'a str,
@@ -91,7 +91,7 @@ pub struct DeleteKeyRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 pub struct ReadKeyRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
@@ -129,10 +129,11 @@ impl<'a> ReadKeyRequest<'a> {
     /// Construct a default ReadKeyRequest to be used with the builder API
     /// e.g.
     /// ```rust
+    /// use rs_consul::ReadKeyRequest;
     /// let req = ReadKeyRequest::new()
     ///     .set_key("bar")
     ///     .set_namespace("foo")
-    ///     .recurse(true);
+    ///     .set_recurse(true);
     /// ```
     pub fn new() -> Self {
         Default::default()
@@ -149,7 +150,7 @@ impl<'a> ReadKeyRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 pub struct LockWatchRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
@@ -171,7 +172,7 @@ pub struct LockWatchRequest<'a> {
 }
 
 /// Represents a request to read a key from Consul Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 pub struct CreateOrUpdateKeyRequest<'a> {
     /// Specifies the path of the key.
     pub key: &'a str,
@@ -265,7 +266,7 @@ pub struct ReadKeyResponse<T: Default = Base64Vec> {
 }
 
 /// Represents a request to create a lock .
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub struct LockRequest<'a> {
     /// The key to use for locking.
@@ -338,7 +339,7 @@ pub struct SessionResponse {
     pub id: String,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct CreateSessionRequest {
     #[default(_code = "Duration::from_secs(0)")]
@@ -359,93 +360,122 @@ pub(crate) struct CreateSessionRequest {
 
 /// Payload struct to register or update entries in consul's catalog.
 /// See https://www.consul.io/api-docs/catalog#register-entity for more information.
-#[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegisterEntityPayload {
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RegisterEntityRequest<'a> {
     /// Optional UUID to assign to the node. This string is required to be 36-characters and UUID formatted.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ID: Option<String>,
+    #[serde(rename = "ID")]
+    pub id: Option<&'a str>,
     /// Node ID to register.
-    pub Node: String,
+    pub node: &'a str,
     /// The address to register.
-    pub Address: String,
+    pub address: &'a str,
     /// The datacenter to register in, defaults to the agent's datacenter.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Datacenter: Option<String>,
+    pub datacenter: Option<&'a str>,
     /// Tagged addressed to register with.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub TaggedAddresses: HashMap<String, String>,
+    pub tagged_addresses: HashMap<&'a str, &'a str>,
     /// KV metadata paris to register with.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub NodeMeta: HashMap<String, String>,
+    pub node_meta: HashMap<&'a str, &'a str>,
     /// Optional service to register.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Service: Option<RegisterEntityService>,
+    pub service: Option<RegisterEntityService<'a>>,
     /// Optional check to register
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Check: Option<RegisterEntityCheck>,
+    pub check: Option<RegisterEntityCheck>,
     /// Whether to skip updating the nodes information in the registration.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub SkipNodeUpdate: Option<bool>,
+    pub skip_node_update: Option<bool>,
 }
 
 /// The service to register with consul's global catalog.
 /// See https://www.consul.io/api/agent/service for more information.
-#[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegisterEntityService {
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RegisterEntityService<'a> {
     /// ID to register service will, defaults to Service.Service property.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ID: Option<String>,
+    #[serde(rename = "ID")]
+    pub id: Option<&'a str>,
     /// The name of the service.
-    pub Service: String,
+    pub service: &'a str,
     /// Optional tags associated with the service.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub Tags: Vec<String>,
+    pub tags: Vec<&'a str>,
     /// Optional map of explicit LAN and WAN addresses for the service.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub TaggedAddresses: HashMap<String, String>,
+    pub tagged_addresses: HashMap<&'a str, &'a str>,
     /// Optional key value meta associated with the service.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub Meta: HashMap<String, String>,
+    pub meta: HashMap<&'a str, &'a str>,
     /// The port of the service
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Port: Option<u16>,
+    pub port: Option<u16>,
     /// The consul namespace to register the service in.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Namespace: Option<String>,
+    pub namespace: Option<&'a str>,
 }
 
 /// Information related to registering a check.
 /// See https://www.consul.io/docs/discovery/checks for more information.
-#[allow(non_snake_case)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct RegisterEntityCheck {
     /// The node to execute the check on.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Node: Option<String>,
+    pub node: Option<String>,
     /// Optional check id, defaults to the name of the check.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub CheckID: Option<String>,
+    #[serde(rename = "CheckID")]
+    pub check_id: Option<String>,
     /// The name associated with the check
-    pub Name: String,
+    pub name: String,
     /// Opaque field encapsulating human-readable text.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Notes: Option<String>,
+    pub notes: Option<String>,
     /// The status of the check. Must be one of 'passing', 'warning', or 'critical'.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub Status: Option<String>,
+    pub status: Option<String>,
     /// ID of the service this check is for. If no ID of a service running on the node is provided,
     /// the check is treated as a node level check
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ServiceID: Option<String>,
+    #[serde(rename = "ServiceID")]
+    pub service_id: Option<String>,
     /// Details for a TCP or HTTP health check.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub Definition: HashMap<String, String>,
+    pub definition: HashMap<String, String>,
+}
+
+/// Request body for de-registering a check or service from the Catalog
+/// See https://developer.hashicorp.com/consul/api-docs/catalog#deregister-entity for more
+/// information
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeregisterEntityRequest<'a> {
+    /// The node on which to execute the registration
+    pub node: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional string to specify which datacenter to find the node. If not supplied, defaults to
+    /// the DC of the agent to which this client is connected
+    pub datacenter: Option<&'a str>,
+    /// Specifies the ID of the Check to remove
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "CheckID")]
+    pub check_id: Option<&'a str>,
+    /// Specifies the ID of the Service to remove 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "ServiceID")]
+    pub service_id: Option<&'a str>,
+    /// The consul namespace to register the service in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<&'a str>,
 }
 
 /// Request for the nodes providing a specified service registered in Consul.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, PartialEq, Eq)]
 pub struct GetServiceNodesRequest<'a> {
     /// Specifies the service to list services for. This is provided as part of the URL.
     pub service: &'a str,
@@ -487,8 +517,10 @@ pub struct Node {
     /// The datacenter where this node is running on.
     pub datacenter: String,
     /// List of explicit WAN and LAN addresses for the node
+    #[serde(deserialize_with = "null_to_default")]
     pub tagged_addresses: HashMap<String, String>,
     /// Map of metadata options
+    #[serde(deserialize_with = "null_to_default")]
     pub meta: HashMap<String, String>,
 }
 
@@ -589,3 +621,26 @@ impl<'de> Deserialize<'de> for Base64Vec {
         deserializer.deserialize_str(Vis)
     }
 }
+
+impl From<Vec<u8>> for Base64Vec {
+    fn from(a: Vec<u8>) -> Base64Vec {
+        Base64Vec(a)
+    }
+}
+
+impl From<Base64Vec> for Vec<u8> {
+    fn from(a: Base64Vec) -> Vec<u8> {
+        a.0
+    }
+}
+
+fn null_to_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    let opt = Option::deserialize(d)?;
+    let val = opt.unwrap_or_else(T::default);
+    Ok(val)
+}
+

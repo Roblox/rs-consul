@@ -152,6 +152,7 @@ const CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME: &str = "create_or_update_key_sync";
 const DELETE_KEY_METHOD_NAME: &str = "delete_key";
 const GET_LOCK_METHOD_NAME: &str = "get_lock";
 const REGISTER_ENTITY_METHOD_NAME: &str = "register_entity";
+const DEREGISTER_ENTITY_METHOD_NAME: &str = "deregister_entity";
 const GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME: &str = "get_all_registered_service_names";
 const GET_SERVICE_NODES_METHOD_NAME: &str = "get_service_nodes";
 const CREATE_SESSION_METHOD_NAME: &str = "create_session";
@@ -194,7 +195,10 @@ impl Config {
 /// The lifetime of this object defines the validity of the lock against consul.
 /// When the object is dropped, the lock is attempted to be released for the next consumer.
 #[derive(Clone, Debug)]
-pub struct LockGuard<'a> {
+pub struct LockGuard<'a, T>
+where
+    T: Default + std::fmt::Debug + Serialize + Clone,
+{
     /// The session ID of the lock.
     pub session_id: String,
     /// The key for the lock.
@@ -206,12 +210,15 @@ pub struct LockGuard<'a> {
     /// The datacenter of this lock.
     pub datacenter: String,
     /// The data in this lock's key
-    pub value: Option<Vec<u8>>,
+    pub value: Option<T>,
     /// The consul client this lock was acquired using.
     pub consul: &'a Consul,
 }
 
-impl Drop for LockGuard<'_> {
+impl<T> Drop for LockGuard<'_, T>
+where
+    T: Default + std::fmt::Debug + Serialize + Clone,
+{
     fn drop(&mut self) {
         let req = CreateOrUpdateKeyRequest {
             key: &self.key,
@@ -338,20 +345,20 @@ impl Consul {
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
     pub async fn read_obj<T>(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse<T>>>
     where
-        T: DeserializeOwned + Default,
+        T: DeserializeOwned + Default + std::fmt::Debug,
     {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+        serde_json::from_slice::<Vec<ReadKeyResponse<Base64Vec>>>(&bytes)
             .map_err(ConsulError::ResponseDeserializationFailed)?
             .into_iter()
             .map(|r| {
                 let v = match r.value {
                     Some(ref val) => Some(
-                        serde_json::from_slice(&val.0)
+                        serde_json::from_slice::<T>(&val.0)
                             .map_err(ConsulError::ResponseDeserializationFailed)?,
                     ),
                     None => None,
@@ -372,22 +379,27 @@ impl Consul {
     /// Creates or updates a key in Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#create-update-key) for more information.
     /// # Arguments:
     /// - request - the [CreateOrUpdateKeyRequest](consul::types::CreateOrUpdateKeyRequest)
-    /// - value - the data to store as [Bytes](bytes::Bytes)
+    /// - value - the data to store, must implement `Serialize` and `Default`
     /// # Returns:
     /// A tuple of a boolean and a 64 bit unsigned integer representing whether the operation was successful and the index for a subsequent blocking query.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn create_or_update_key(
+    pub async fn create_or_update_key<T>(
         &self,
         request: CreateOrUpdateKeyRequest<'_>,
-        value: Vec<u8>,
-    ) -> Result<(bool, u64)> {
+        value: &T,
+    ) -> Result<(bool, u64)>
+    where
+        T: Default + Serialize + std::fmt::Debug,
+    {
         let url = self.build_create_or_update_url(request);
         let req = hyper::Request::builder().method(Method::PUT).uri(url);
+        let req_bytes =
+            serde_json::to_vec(value).map_err(ConsulError::RequestSerializationFailed)?;
         let (mut response_body, index) = self
             .execute_request(
                 req,
-                Body::from(value),
+                Body::from(req_bytes),
                 None,
                 CREATE_OR_UPDATE_KEY_METHOD_NAME,
             )
@@ -438,23 +450,28 @@ impl Consul {
     /// A tuple of a boolean and a 64 bit unsigned integer representing whether the operation was successful and the index for a subsequent blocking query.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub fn create_or_update_key_sync(
+    pub fn create_or_update_key_sync<T>(
         &self,
         request: CreateOrUpdateKeyRequest<'_>,
-        value: Vec<u8>,
-    ) -> Result<bool> {
+        value: T,
+    ) -> Result<bool>
+    where
+        T: Default + Serialize + std::fmt::Debug,
+    {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
 
         record_request_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
+        let req_bytes =
+            serde_json::to_vec(&value).map_err(ConsulError::RequestSerializationFailed)?;
         let step_start_instant = Instant::now();
         let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
                 &self.config.token.clone().unwrap_or_default(),
             )
-            .send_bytes(&value);
+            .send_bytes(&req_bytes);
 
         record_duration_metric_if_enabled(
             &Method::PUT,
@@ -521,14 +538,17 @@ impl Consul {
     /// - request - the [LockRequest](consul::types::LockRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_lock(
+    pub async fn get_lock<T>(
         &self,
         mut request: LockRequest<'_>,
-        value: &[u8],
-    ) -> Result<LockGuard<'_>> {
+        value: T,
+    ) -> Result<LockGuard<'_, T>>
+    where
+        T: Default + Serialize + std::fmt::Debug + Clone,
+    {
         let session = self.create_session(&request).await?;
         request.session_id = session.id.as_str();
-        let _lock_res = self.get_lock_inner(&request, value).await?;
+        let _lock_res = self.get_lock_inner(&request, &value).await?;
         // No need to check lock_res, if it didn't return Err, then the lock was successful
         Ok(LockGuard {
             timeout: request.timeout,
@@ -537,7 +557,7 @@ impl Consul {
             consul: self,
             datacenter: request.datacenter.to_string(),
             namespace: request.namespace.to_string(),
-            value: Some(value.to_owned()),
+            value: Some(value),
         })
     }
 
@@ -548,7 +568,10 @@ impl Consul {
     /// - request - the [LockRequest](consul::types::LockRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_lock_inner(&self, request: &LockRequest<'_>, value: &[u8]) -> Result<bool> {
+    pub async fn get_lock_inner<T>(&self, request: &LockRequest<'_>, value: &T) -> Result<bool>
+    where
+        T: Default + Serialize + std::fmt::Debug,
+    {
         let req = CreateOrUpdateKeyRequest {
             key: request.key,
             namespace: request.namespace,
@@ -556,8 +579,7 @@ impl Consul {
             acquire: request.session_id,
             ..Default::default()
         };
-        let value_copy = value.to_vec();
-        let (lock_acquisition_result, _index) = self.create_or_update_key(req, value_copy).await?;
+        let (lock_acquisition_result, _index) = self.create_or_update_key(req, value).await?;
         if lock_acquisition_result {
             Ok(lock_acquisition_result)
         } else {
@@ -609,7 +631,7 @@ impl Consul {
     /// - payload: The [`RegisterEntityPayload`](RegisterEntityPayload) to provide the register entity API.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn register_entity(&self, payload: &RegisterEntityPayload) -> Result<()> {
+    pub async fn register_entity(&self, payload: &RegisterEntityRequest<'_>) -> Result<()> {
         let uri = format!("{}/v1/catalog/register", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
@@ -618,6 +640,26 @@ impl Consul {
             payload.into(),
             Some(Duration::from_secs(5)),
             REGISTER_ENTITY_METHOD_NAME,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Un-Registers an entity from the consul Catalog
+    /// See https://www.consul.io/api-docs/catalog#deregister-entity for more information.
+    /// # Arguments:
+    /// - payload: The [`DeRegisterEntityPayload`](DeRegisterEntityPayload) to provide the register entity API.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn deregister_entity(&self, payload: &DeregisterEntityRequest<'_>) -> Result<()> {
+        let uri = format!("{}/v1/catalog/deregister", self.config.address);
+        let request = hyper::Request::builder().method(Method::PUT).uri(uri);
+        let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
+        self.execute_request(
+            request,
+            payload.into(),
+            Some(Duration::from_secs(5)),
+            DEREGISTER_ENTITY_METHOD_NAME,
         )
         .await?;
         Ok(())
@@ -1058,22 +1100,76 @@ mod tests {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_read_string() {
+    async fn clear_and_create_and_read_string() {
         let consul = get_client();
         let key = "test/consul/read";
-        let string_value = "This is a test";
-        let res = create_or_update_key_value(&consul, key, string_value).await;
-        assert_expected_result_with_index(res);
+        consul
+            .delete_key(DeleteKeyRequest {
+                key,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let string_value = "This is a test".to_owned();
+        let res = create_or_update_key_value(&consul, key, &string_value)
+            .await
+            .unwrap();
+        assert!(res.0);
+        let res = read_string(&consul, key).await.unwrap();
+        assert_eq!(string_value, res.into_iter().next().unwrap().value.unwrap());
+    }
 
-        let res = read_string(&consul, key).await;
-        verify_single_value_matches(res, string_value);
+    #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+    struct ComplexStruct {
+        stuff: HashMap<String, u128>,
+        wat: String,
+        num: u64,
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn clear_and_create_and_read_complex() {
+        let consul = get_client();
+        let key = "test/consul/complex";
+        consul
+            .delete_key(DeleteKeyRequest {
+                key,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let value = ComplexStruct {
+            stuff: HashMap::from([("hmmm".to_owned(), 1234234), ("lalala".to_owned(), 42)]),
+            wat: "this is wat".into(),
+            num: 424242424242424242,
+        };
+        let res = create_or_update_key_value(&consul, key, &value)
+            .await
+            .unwrap();
+        assert!(res.0);
+        let req = ReadKeyRequest::new().set_key(key);
+        let res = consul.read_obj::<ComplexStruct>(req).await.unwrap();
+        assert_eq!(value, res.into_iter().next().unwrap().value.unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_register_and_retrieve_services() {
         let consul = get_client();
 
-        let new_service_name = "test-service-44".to_string();
+        let new_service_name = "test-service-44";
+        let list_request = GetServiceNodesRequest {
+            service: new_service_name,
+            ..Default::default()
+        };
+        let list_response = consul.get_service_nodes(list_request, None).await.unwrap();
+
+        for sn in list_response.response.iter() {
+            let dereg_request = DeregisterEntityRequest {
+                node: "local".into(),
+                service_id: Some(sn.service.id.as_str()),
+                ..Default::default()
+            };
+            consul.deregister_entity(&dereg_request).await.unwrap();
+        }
 
         // verify a service by this name is currently not registered
         let ResponseMeta {
@@ -1083,27 +1179,27 @@ mod tests {
             .get_all_registered_service_names(None)
             .await
             .expect("expected get_registered_service_names request to succeed");
-        assert!(!service_names_before_register.contains(&new_service_name));
+        assert!(!service_names_before_register.contains(&new_service_name.to_owned()));
 
         // register a new service
-        let payload = RegisterEntityPayload {
-            ID: None,
-            Node: "local".to_string(),
-            Address: "127.0.0.1".to_string(),
-            Datacenter: None,
-            TaggedAddresses: Default::default(),
-            NodeMeta: Default::default(),
-            Service: Some(RegisterEntityService {
-                ID: None,
-                Service: new_service_name.clone(),
-                Tags: vec![],
-                TaggedAddresses: Default::default(),
-                Meta: Default::default(),
-                Port: Some(42424),
-                Namespace: None,
+        let payload = RegisterEntityRequest {
+            id: None,
+            node: "local",
+            address: "127.0.0.1",
+            datacenter: None,
+            tagged_addresses: Default::default(),
+            node_meta: Default::default(),
+            service: Some(RegisterEntityService {
+                id: None,
+                service: new_service_name,
+                tags: vec![],
+                tagged_addresses: Default::default(),
+                meta: Default::default(),
+                port: Some(42424),
+                namespace: None,
             }),
-            Check: None,
-            SkipNodeUpdate: None,
+            check: None,
+            skip_node_update: None,
         };
         consul
             .register_entity(&payload)
@@ -1118,7 +1214,7 @@ mod tests {
             .get_all_registered_service_names(None)
             .await
             .expect("expected get_registered_service_names request to succeed");
-        assert!(service_names_after_register.contains(&new_service_name));
+        assert!(service_names_after_register.contains(&new_service_name.to_owned()));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1163,8 +1259,8 @@ mod tests {
     async fn create_and_delete_key() {
         let consul = get_client();
         let key = "test/consul/again";
-        let string_value = "This is a new test";
-        let res = create_or_update_key_value(&consul, key, string_value).await;
+        let string_value = "This is a new test".to_owned();
+        let res = create_or_update_key_value(&consul, key, &string_value).await;
         assert_expected_result_with_index(res);
 
         let res = delete_key(&consul, key).await;
@@ -1196,10 +1292,10 @@ mod tests {
         };
         let session_id: String;
         {
-            let res = consul.get_lock(req, string_value.as_bytes()).await;
+            let res = consul.get_lock(req.clone(), string_value).await;
             assert!(res.is_ok());
             let mut lock = res.unwrap();
-            let res2 = consul.get_lock(req, string_value.as_bytes()).await;
+            let res2 = consul.get_lock(req, string_value).await;
             assert!(res2.is_err());
             let err = res2.unwrap_err();
             match err {
@@ -1211,13 +1307,13 @@ mod tests {
             }
             session_id = lock.session_id.to_string();
             // Lets change the value before dropping the lock to ensure the change is persisted when the lock is dropped.
-            lock.value = Some(new_string_value.as_bytes().to_vec())
+            lock.value = Some(new_string_value)
             // lock gets dropped here.
         }
 
         sleep(Duration::from_secs(2)).await;
         let key_resp = read_string(&consul, key).await;
-        verify_single_value_matches(key_resp, &new_string_value);
+        verify_single_value_matches(key_resp, &new_string_value.to_owned());
 
         let req = LockRequest {
             key,
@@ -1226,7 +1322,7 @@ mod tests {
             session_id: &session_id,
             ..Default::default()
         };
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
+        let res = consul.get_lock(req, string_value).await;
         assert!(res.is_ok());
     }
 
@@ -1242,10 +1338,10 @@ mod tests {
             ..Default::default()
         };
         let start_index: u64;
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
+        let res = consul.get_lock(req.clone(), string_value).await;
         assert!(res.is_ok());
         let lock = res.unwrap();
-        let res2 = consul.get_lock(req, string_value.as_bytes()).await;
+        let res2 = consul.get_lock(req.clone(), string_value).await;
         assert!(res2.is_err());
         let err = res2.unwrap_err();
         match err {
@@ -1269,7 +1365,7 @@ mod tests {
         assert!(res.is_ok());
         std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
 
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
+        let res = consul.get_lock(req, string_value).await;
         assert!(res.is_ok());
     }
 
@@ -1391,25 +1487,23 @@ mod tests {
         Consul::new(conf)
     }
 
-    async fn create_or_update_key_value(
+    async fn create_or_update_key_value<T>(
         consul: &Consul,
         key: &str,
-        value: &str,
-    ) -> Result<(bool, u64)> {
+        value: &T,
+    ) -> Result<(bool, u64)>
+    where
+        T: Serialize + std::fmt::Debug + ?Sized + Default,
+    {
         let req = CreateOrUpdateKeyRequest {
             key,
             ..Default::default()
         };
-        consul
-            .create_or_update_key(req, value.as_bytes().to_vec())
-            .await
+        Ok(consul.create_or_update_key(req, value).await?)
     }
 
     async fn read_string(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse<String>>> {
-        let req = ReadKeyRequest {
-            key,
-            ..Default::default()
-        };
+        let req = ReadKeyRequest::new().set_key(key);
         consul.read_obj::<String>(req).await
     }
 
@@ -1432,10 +1526,13 @@ mod tests {
         assert!(res.unwrap());
     }
 
-    fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse<String>>>, value: &str) {
+    fn verify_single_value_matches<'a, T>(res: Result<Vec<ReadKeyResponse<T>>>, value: &'a T)
+    where
+        T: PartialEq + std::fmt::Debug + Default,
+    {
         assert!(res.is_ok());
         assert_eq!(
-            res.unwrap().into_iter().next().unwrap().value.unwrap(),
+            &res.unwrap().into_iter().next().unwrap().value.unwrap(),
             value
         )
     }
