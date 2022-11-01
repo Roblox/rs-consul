@@ -516,8 +516,8 @@ impl Consul {
             "{}/v1/kv/{}?recurse={}",
             self.config.address, request.key, request.recurse
         ));
-        if request.check_and_set != 0 {
-            url.push_str(&format!("&cas={}", request.check_and_set));
+        if let Some(cas) = request.check_and_set {
+            url.push_str(&format!("&cas={}", cas));
         }
 
         url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
@@ -610,10 +610,13 @@ impl Consul {
     /// - request - the [LockWatchRequest](consul::types::LockWatchRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn watch_lock<'a>(
+    pub async fn watch_lock<'a, T>(
         &self,
         request: LockWatchRequest<'_>,
-    ) -> Result<Vec<ReadKeyResponse>> {
+    ) -> Result<Vec<ReadKeyResponse<T>>>
+    where
+        T: Default + DeserializeOwned + std::fmt::Debug,
+    {
         let req = ReadKeyRequest {
             key: request.key,
             namespace: request.namespace,
@@ -1331,7 +1334,14 @@ mod tests {
     async fn create_and_watch_lock() {
         let consul = get_client();
         let key = "test/consul/watchedlock";
-        let string_value = "This is a lock test";
+        let _res = consul
+            .delete_key(DeleteKeyRequest {
+                key,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let string_value = "This is a lock test".to_owned();
         let req = LockRequest {
             key,
             behavior: LockExpirationBehavior::Release,
@@ -1339,12 +1349,14 @@ mod tests {
             ..Default::default()
         };
         let start_index: u64;
-        let res = consul.get_lock(req.clone(), string_value).await;
-        assert!(res.is_ok());
-        let lock = res.unwrap();
-        let res2 = consul.get_lock(req.clone(), string_value).await;
-        assert!(res2.is_err());
-        let err = res2.unwrap_err();
+        let lock = consul
+            .get_lock(req.clone(), string_value.clone())
+            .await
+            .unwrap();
+        let err = consul
+            .get_lock(req.clone(), string_value.clone())
+            .await
+            .unwrap_err();
         match err {
             ConsulError::LockAcquisitionFailure(index) => start_index = index,
             _ => panic!(
@@ -1358,16 +1370,14 @@ mod tests {
             key,
             consistency: ConsistencyMode::Consistent,
             index: Some(start_index),
-            wait: Duration::from_secs(60),
+            wait: Duration::from_secs(5),
             ..Default::default()
         };
         // The lock will timeout and this this will return.
-        let res = consul.watch_lock(watch_req).await;
-        assert!(res.is_ok());
+        let _res = consul.watch_lock::<String>(watch_req).await.unwrap();
         std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
 
-        let res = consul.get_lock(req, string_value).await;
-        assert!(res.is_ok());
+        let _res = consul.get_lock(req, string_value).await.unwrap();
     }
 
     #[test]
@@ -1418,7 +1428,7 @@ mod tests {
     async fn properly_handle_check_and_set() {
         let consul = get_client();
         let key = "test/consul/proper_cas_handling";
-        let string_value1 = "This is CAS test";
+        let string_value1 = "This is CAS test".to_owned();
         let req = CreateOrUpdateKeyRequest {
             key,
             check_and_set: Some(0),
@@ -1428,24 +1438,24 @@ mod tests {
         // Key does not exist, with CAS set and modify index set to 0
         // it should be created.
         let (set, _) = consul
-            .create_or_update_key(req.clone(), string_value1.as_bytes().to_vec())
+            .create_or_update_key(req.clone(), &string_value1)
             .await
             .expect("failed to create key initially");
         assert!(set);
         let (value, mod_idx1) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value1, &value.unwrap());
+        assert_eq!(&string_value1, &value.unwrap());
 
         // Subsequent request with CAS set to 0 should not override the
         // value.
-        let string_value2 = "This is CAS test - not valid";
+        let string_value2 = "This is CAS test - not valid".to_owned();
         let (set, _) = consul
-            .create_or_update_key(req, string_value2.as_bytes().to_vec())
+            .create_or_update_key(req, &string_value2)
             .await
             .expect("failed to run subsequent create_or_update_key");
         assert!(!set);
         // Value and modify index should not have changed because set failed.
         let (value, mod_idx2) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value1, &value.unwrap());
+        assert_eq!(&string_value1, &value.unwrap());
         assert_eq!(mod_idx1, mod_idx2);
 
         // Successfully set value with proper CAS value.
@@ -1454,15 +1464,15 @@ mod tests {
             check_and_set: Some(mod_idx1),
             ..Default::default()
         };
-        let string_value3 = "This is correct CAS updated";
+        let string_value3 = "This is correct CAS updated".to_owned();
         let (set, _) = consul
-            .create_or_update_key(req, string_value3.as_bytes().to_vec())
+            .create_or_update_key(req, &string_value3)
             .await
             .expect("failed to run create_or_update_key with proper CAS value");
         assert!(set);
         // Verify that value was updated and the index changed.
         let (value, mod_idx3) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value3, &value.unwrap());
+        assert_eq!(&string_value3, &value.unwrap());
         assert_ne!(mod_idx1, mod_idx3);
 
         // Successfully set value without CAS.
@@ -1471,16 +1481,22 @@ mod tests {
             check_and_set: None,
             ..Default::default()
         };
-        let string_value4 = "This is non CAS update";
+        let string_value4 = "This is non CAS update".to_owned();
         let (set, _) = consul
-            .create_or_update_key(req, string_value4.as_bytes().to_vec())
+            .create_or_update_key(req, &string_value4)
             .await
             .expect("failed to run create_or_update_key without CAS");
         assert!(set);
         // Verify that value was updated and the index changed.
         let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value4, &value.unwrap());
+        assert_eq!(&string_value4, &value.unwrap());
         assert_ne!(mod_idx3, mod_idx4);
+    }
+
+    async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, u64) {
+        let res = read_string(consul, key).await.expect("failed to read key");
+        let r = res.into_iter().next().unwrap();
+        (r.value, r.modify_index)
     }
 
     fn get_client() -> Consul {

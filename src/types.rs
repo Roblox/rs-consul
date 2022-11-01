@@ -84,7 +84,7 @@ pub struct DeleteKeyRequest<'a> {
     /// This is very useful as a building block for more complex synchronization primitives.
     /// The index must be greater than 0 for Consul to take any action: a 0 index will not delete the key.
     /// If the index is non-zero, the key is only deleted if the index matches the ModifyIndex of that key.
-    pub check_and_set: u32,
+    pub check_and_set: Option<u64>,
     /// Specifies the namespace to query.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
     pub namespace: &'a str,
@@ -190,7 +190,7 @@ pub struct CreateOrUpdateKeyRequest<'a> {
     /// This is very useful as a building block for more complex synchronization primitives.
     /// If the index is 0, Consul will only put the key if it does not already exist.
     /// If the index is non-zero, the key is only set if the index matches the ModifyIndex of that key.
-    pub check_and_set: Option<i64>,
+    pub check_and_set: Option<u64>,
     /// Supply a session ID to use in a lock acquisition operation.
     /// This is useful as it allows leader election to be built on top of Consul.
     /// If the lock is not held and the session is valid, this increments the LockIndex and sets the Session value of the key in addition to updating the key contents.
