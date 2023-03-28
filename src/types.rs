@@ -507,6 +507,7 @@ pub struct ServiceNode {
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 /// The node information of an instance providing a Consul service.
+/// provided by the Consul Health API
 pub struct Node {
     /// The ID of the service node.
     #[serde(rename = "ID")]
@@ -523,6 +524,30 @@ pub struct Node {
     /// Map of metadata options
     #[serde(deserialize_with = "null_to_default")]
     pub meta: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+/// The node information as returned by the Consul Catalog API
+pub struct NodeFull {
+    id: String,
+    node: String,
+    address: String,
+    datacenter: String,
+    tagged_addresses: HashMap<String, String>,
+    node_meta: HashMap<String, String>,
+    create_index: u64,
+    modify_index: u64,
+    service_address: Option<String>,
+    service_enable_tag_override: Option<bool>,
+    #[serde(rename = "Service_ID")]
+    service_id: Option<String>,
+    service_name: Option<String>,
+    service_port: Option<u16>,
+    service_meta: HashMap<String, String>,
+    service_tagged_addresses: HashMap<String, String>,
+    service_tags: Vec<String>,
+    namespace: Option<String>,
 }
 
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]
