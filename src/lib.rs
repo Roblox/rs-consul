@@ -31,7 +31,6 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{env, str::Utf8Error};
 
-use hyper::Client;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
 use hyper_rustls::HttpsConnector;
@@ -99,6 +98,10 @@ quick_error! {
         /// Unable to resolve the service's instances in Consul.
         ServiceInstanceResolutionFailed(service_name: String) {
             display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
+        }
+        /// The request failed either due to an unexpected status code or a transport error.
+        RequestFailedError(err: ureq::Error) {
+            from()
         }
 
     }
@@ -218,7 +221,12 @@ pub struct Consul {
 }
 
 fn https_client() -> HttpsConnector<HttpConnector> {
-    HttpsConnector::new(HttpConnector::new())
+    #[cfg(feature = "rustls-native")]
+    return hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
+    #[cfg(feature = "rustls-webpki")]
+    return hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
+    #[cfg(feature = "default-tls")]
+    return HttpsConnector::new();
 }
 
 impl Consul {
@@ -325,17 +333,7 @@ impl Consul {
         );
         let response = result.map_err(|e| {
                     record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
-                    match e {
-                        ureq::Error::Status(code, resp) => {
-                            error!("Consul returned error with status code {} and response {:?}", code, resp);
-                            ConsulError::UnexpectedResponseCode(http::StatusCode::from_u16(code).unwrap(), resp.into_string().unwrap_or_default())
-                        },
-                        ureq::Error::Transport(err) => {
-                            error!("Consul returned transport error {:?}", err);
-                            ConsulError::ResponseError()
-                        },
-                    }
-
+                    ConsulError::RequestFailedError(e)
                 })?;
         let status = response.status();
         if status == 200 {
@@ -716,7 +714,7 @@ impl Consul {
                 .await
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
             let bytes = response_body.copy_to_bytes(response_body.remaining());
-            let resp = std::str::from_utf8(&*bytes)
+            let resp = std::str::from_utf8(&bytes)
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
             return Err(ConsulError::UnexpectedResponseCode(
                 status,

@@ -84,6 +84,6 @@ pub fn annotate_span_for_response<T>(span: &mut BoxedSpan, response: &hyper::Res
     }
 
     if status != hyper::StatusCode::OK {
-        span.set_status(Status::Error { description:  status.as_str().into() });
+        span.set_status(Status::Error { description:  status.to_string().into() });
     }
 }
