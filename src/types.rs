@@ -158,7 +158,7 @@ pub struct CreateOrUpdateKeyRequest<'a> {
     /// This is very useful as a building block for more complex synchronization primitives.
     /// If the index is 0, Consul will only put the key if it does not already exist.
     /// If the index is non-zero, the key is only set if the index matches the ModifyIndex of that key.
-    pub check_and_set: i64,
+    pub check_and_set: Option<i64>,
     /// Supply a session ID to use in a lock acquisition operation.
     /// This is useful as it allows leader election to be built on top of Consul.
     /// If the lock is not held and the session is valid, this increments the LockIndex and sets the Session value of the key in addition to updating the key contents.
