@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- `opentelemetry` feature must be specified to enable opentelemetry support.
+- `opentelemetry` updated to version `0.18`.
+- `base64` updated to version `0.20`.
+
 ### Deprecated
 
 ### Removed
