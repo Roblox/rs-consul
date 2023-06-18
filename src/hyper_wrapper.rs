@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2021 Roblox
+Copyright (c) 2023 Roblox
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@ SOFTWARE.
 use hyper::Version;
 use opentelemetry::{
     global::{BoxedSpan, BoxedTracer},
-    trace::{Span, StatusCode, Tracer},
+    trace::{Span, Status, Tracer},
     KeyValue,
 };
 
@@ -84,6 +84,6 @@ pub fn annotate_span_for_response<T>(span: &mut BoxedSpan, response: &hyper::Res
     }
 
     if status != hyper::StatusCode::OK {
-        span.set_status(StatusCode::Error, status.as_str().to_owned());
+        span.set_status(Status::Error { description:  status.as_str().into() });
     }
 }

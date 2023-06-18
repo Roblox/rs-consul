@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2021 Roblox
+Copyright (c) 2023 Roblox
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,18 +31,18 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{env, str::Utf8Error};
 
+use hyper::Client;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
 use hyper_rustls::HttpsConnector;
 #[cfg(feature = "default-tls")]
-use hyper_tls::HttpsConnector;
 
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
 use opentelemetry::global;
 use opentelemetry::global::BoxedTracer;
 use opentelemetry::trace::Span;
-use opentelemetry::trace::StatusCode;
+use opentelemetry::trace::Status;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
@@ -100,10 +100,10 @@ quick_error! {
         ServiceInstanceResolutionFailed(service_name: String) {
             display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
         }
+
     }
 }
 
-#[allow(unused_variables)]
 #[cfg(feature = "metrics")]
 lazy_static! {
     static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
@@ -218,12 +218,7 @@ pub struct Consul {
 }
 
 fn https_client() -> HttpsConnector<HttpConnector> {
-    #[cfg(feature = "rustls-native")]
-    return HttpsConnector::with_native_roots();
-    #[cfg(feature = "rustls-webpki")]
-    return HttpsConnector::with_webpki_roots();
-    #[cfg(feature = "default-tls")]
-    return HttpsConnector::new();
+    HttpsConnector::new(HttpConnector::new())
 }
 
 impl Consul {
@@ -316,7 +311,7 @@ impl Consul {
 
         record_request_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         let step_start_instant = Instant::now();
-        let res = ureq::put(&url)
+        let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
                 &self.config.token.clone().unwrap_or_default(),
@@ -328,15 +323,28 @@ impl Consul {
             CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME,
             step_start_instant.elapsed().as_millis() as f64,
         );
+        let response = result.map_err(|e| {
+                    record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
+                    match e {
+                        ureq::Error::Status(code, resp) => {
+                            error!("Consul returned error with status code {} and response {:?}", code, resp);
+                            ConsulError::UnexpectedResponseCode(http::StatusCode::from_u16(code).unwrap(), resp.into_string().unwrap_or_default())
+                        },
+                        ureq::Error::Transport(err) => {
+                            error!("Consul returned transport error {:?}", err);
+                            ConsulError::ResponseError()
+                        },
+                    }
 
-        let status = res.status();
+                })?;
+        let status = response.status();
         if status == 200 {
-            let val = res.into_string()?;
+            let val = response.into_string()?;
             let response: bool = std::str::FromStr::from_str(val.trim())?;
             return Ok(response);
         }
 
-        let body = res.into_string()?;
+        let body = response.into_string()?;
         record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         Err(ConsulError::SyncUnexpectedResponseCode(status, body))
     }
@@ -725,7 +733,7 @@ impl Consul {
             Err(e) => {
                 record_failure_metric_if_enabled(&method, request_name);
 
-                span.set_status(StatusCode::Error, e.to_string());
+                span.set_status(Status::Error { description: e.to_string().into() });
                 Err(ConsulError::InvalidResponse(e))
             }
         }

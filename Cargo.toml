@@ -18,22 +18,20 @@ rustls-webpki = ["hyper-rustls/webpki-roots"]
 
 # keep this list sorted!
 [dependencies]
-base64 = "0.13.0"
+base64 = "0.21"
 futures = "0.3.8"
 http = "0.2.1"
 hyper = { version = "0.14.2", features = ["full"] }
-hyper-rustls = { version = "0.22.1", optional = true }
+hyper-rustls = { version = "0.24", optional = true }
 hyper-tls = { version = "0.5.0", optional = true, no-default-features = true }
 lazy_static = { version = "1.4.0", optional = true }
-opentelemetry = { version = "0.15", features = ["tokio", "rt-tokio"] }
+opentelemetry = { version = "0.19", features = ["rt-tokio"] }
 prometheus = { version = "0.13", optional = true }
-quick-error = "2.0"
+quick-error = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 slog-scope = "4.3"
-smart-default = "0.6.0"
+smart-default = "0.7"
 tokio = { version = "1.1.1", features = ["full"] }
-ureq = { version = "1.5.4", features = ["json"] }
+ureq = { version = "2", features = ["json"] }
 
-[dev-dependencies]
-base64 = "0.13.0"
