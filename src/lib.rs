@@ -34,7 +34,6 @@ use std::{env, str::Utf8Error};
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
 use hyper_rustls::HttpsConnector;
-#[cfg(feature = "default-tls")]
 
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
@@ -227,13 +226,10 @@ pub struct Consul {
     tracer: BoxedTracer,
 }
 
-fn https_client() -> HttpsConnector<HttpConnector> {
-    #[cfg(feature = "rustls-native")]
-    return hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
+fn https_connector() -> HttpsConnector<HttpConnector> {
     #[cfg(feature = "rustls-webpki")]
     return hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-    #[cfg(feature = "default-tls")]
-    return hyper_tls::HttpsConnector::new();
+    hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build()
 }
 
 impl Consul {
@@ -242,7 +238,7 @@ impl Consul {
     /// #Arguments:
     /// - [Config](consul::Config)
     pub fn new(config: Config) -> Self {
-        let https = https_client();
+        let https = https_connector();
         let https_client = hyper::Client::builder().build::<_, hyper::Body>(https);
         Consul {
             https_client,
@@ -1002,12 +998,12 @@ mod tests {
         let session_id: String;
         {
             let res = consul
-                .get_lock(req, &string_value.as_bytes().to_vec())
+                .get_lock(req, string_value.as_bytes())
                 .await;
             assert!(res.is_ok());
             let mut lock = res.unwrap();
             let res2 = consul
-                .get_lock(req, &string_value.as_bytes().to_vec())
+                .get_lock(req, string_value.as_bytes())
                 .await;
             assert!(res2.is_err());
             let err = res2.unwrap_err();
@@ -1026,7 +1022,7 @@ mod tests {
 
         sleep(Duration::from_secs(2)).await;
         let key_resp = read_key(&consul, key).await;
-        verify_single_value_matches(key_resp, &new_string_value);
+        verify_single_value_matches(key_resp, new_string_value);
 
         let req = LockRequest {
             key,
@@ -1036,7 +1032,7 @@ mod tests {
             ..Default::default()
         };
         let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
+            .get_lock(req, string_value.as_bytes())
             .await;
         assert!(res.is_ok());
     }
@@ -1054,12 +1050,12 @@ mod tests {
         };
         let start_index: u64;
         let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
+            .get_lock(req, string_value.as_bytes())
             .await;
         assert!(res.is_ok());
         let lock = res.unwrap();
         let res2 = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
+            .get_lock(req, string_value.as_bytes())
             .await;
         assert!(res2.is_err());
         let err = res2.unwrap_err();
@@ -1085,7 +1081,7 @@ mod tests {
         std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
 
         let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
+            .get_lock(req, string_value.as_bytes())
             .await;
         assert!(res.is_ok());
     }
@@ -1207,9 +1203,9 @@ mod tests {
             key,
             ..Default::default()
         };
-        Ok(consul
+        consul
             .create_or_update_key(req, value.as_bytes().to_vec())
-            .await?)
+            .await
     }
 
     async fn read_key(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {

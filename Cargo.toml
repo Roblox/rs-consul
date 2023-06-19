@@ -10,8 +10,7 @@ license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["default-tls"]
-default-tls  = ["hyper-tls"]
+default = ["hyper-rustls/rustls-native-certs"]
 metrics = ["prometheus", "lazy_static"]
 rustls-native = ["hyper-rustls/rustls-native-certs"]
 rustls-webpki = ["hyper-rustls/webpki-roots"]
@@ -23,8 +22,7 @@ base64 = "0.21"
 futures = "0.3"
 http = "0.2"
 hyper = { version = "0.14.2", features = ["full"] }
-hyper-rustls = { version = "0.24", optional = true }
-hyper-tls = { version = "0.5", optional = true, no-default-features = true }
+hyper-rustls = { version = "0.24" }
 lazy_static = { version = "1", optional = true }
 opentelemetry = { version = "0.19", features = ["rt-tokio"], optional = true }
 prometheus = { version = "0.13", optional = true }
