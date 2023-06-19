@@ -30,4 +30,4 @@ jobs:
         run: cargo install cargo-sort
 
       - name: Lint Cargo.toml
-        run: cargo sort -c Cargo.toml
+        run: cargo sort -c .
