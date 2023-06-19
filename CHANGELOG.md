@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Fixed `create_or_update_key` to properly handle a `check_and_set` value of 0 (instead of omitting it when set to 0). As a result, the type has changed from `i64` to `Option<i64>` in `CreateOrUpdateKeyRequest`.
-- `opentelemetry` feature must be specified to enable opentelemetry/tracing support.
+- `trace` feature must be specified to enable opentelemetry/tracing support.
 - `opentelemetry` updated to version `0.19` from `0.15`.
 - `base64` updated to version `0.21` from `0.13`.
 - `rustls` updated to `0.24` from `0.22`.
