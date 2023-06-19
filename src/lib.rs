@@ -41,18 +41,18 @@ use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
-#[cfg(feature = "opentelemetry")]
+#[cfg(feature = "trace")]
 use opentelemetry::global;
-#[cfg(feature = "opentelemetry")]
+#[cfg(feature = "trace")]
 use opentelemetry::global::BoxedTracer;
-#[cfg(feature = "opentelemetry")]
+#[cfg(feature = "trace")]
 use opentelemetry::trace::Span;
-#[cfg(feature = "opentelemetry")]
+#[cfg(feature = "trace")]
 use opentelemetry::trace::Status;
 
 pub use types::*;
 
-#[cfg(feature = "opentelemetry")]
+#[cfg(feature = "trace")]
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -220,7 +220,7 @@ impl Drop for Lock<'_> {
 pub struct Consul {
     https_client: hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body>,
     config: Config,
-    #[cfg(feature = "opentelemetry")]
+    #[cfg(feature = "trace")]
     tracer: BoxedTracer,
 }
 
@@ -249,7 +249,7 @@ impl Consul {
         Consul {
             https_client,
             config,
-            #[cfg(feature = "opentelemetry")]
+            #[cfg(feature = "trace")]
             tracer: global::tracer("consul"),
         }
     }
@@ -701,7 +701,7 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
-        #[cfg(feature = "opentelemetry")]
+        #[cfg(feature = "trace")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
         let method = req.method().clone();
@@ -729,7 +729,7 @@ impl Consul {
 
         let response = response?;
 
-        #[cfg(feature = "opentelemetry")]
+        #[cfg(feature = "trace")]
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
@@ -757,7 +757,7 @@ impl Consul {
             Err(e) => {
                 record_failure_metric_if_enabled(&method, request_name);
 
-                #[cfg(feature = "opentelemetry")]
+                #[cfg(feature = "trace")]
                 span.set_status(Status::error(e.to_string()));
                 Err(ConsulError::InvalidResponse(e))
             }
