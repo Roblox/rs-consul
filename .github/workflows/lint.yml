@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     runs-on: "ubuntu-latest"
-    container: rust:1.61.0
+    container: rust:1.70.0
 
     steps:
       - uses: actions/checkout@v2
@@ -30,4 +30,4 @@ jobs:
         run: cargo install cargo-sort
 
       - name: Lint Cargo.toml
-        run: cargo sort -c Cargo.toml
+        run: cargo sort -c .
