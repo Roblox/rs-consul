@@ -43,18 +43,18 @@ use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
-#[cfg(feature="opentelemetry")]
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::global;
-#[cfg(feature="opentelemetry")]
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::global::BoxedTracer;
-#[cfg(feature="opentelemetry")]
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::trace::Span;
-#[cfg(feature="opentelemetry")]
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::trace::Status;
 
 pub use types::*;
 
-#[cfg(feature="opentelemetry")]
+#[cfg(feature = "opentelemetry")]
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -220,16 +220,24 @@ impl Drop for Lock<'_> {
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
-    https_client: hyper::Client<HttpsConnector<HttpConnector>, Body>,
+    https_client: hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body>,
     config: Config,
-    #[cfg(feature="opentelemetry")]
+    #[cfg(feature = "opentelemetry")]
     tracer: BoxedTracer,
 }
 
-fn https_connector() -> HttpsConnector<HttpConnector> {
+fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
     #[cfg(feature = "rustls-webpki")]
-    return hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-    hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build()
+    return hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .build();
+    hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .build()
 }
 
 impl Consul {
@@ -243,7 +251,7 @@ impl Consul {
         Consul {
             https_client,
             config,
-            #[cfg(feature="opentelemetry")]
+            #[cfg(feature = "opentelemetry")]
             tracer: global::tracer("consul"),
         }
     }
@@ -264,7 +272,12 @@ impl Consul {
             .into_iter()
             .map(|mut r| {
                 r.value = match r.value {
-                    Some(val) => Some(std::str::from_utf8(&base64::engine::general_purpose::STANDARD.decode(val)?)?.to_string()),
+                    Some(val) => Some(
+                        std::str::from_utf8(
+                            &base64::engine::general_purpose::STANDARD.decode(val)?,
+                        )?
+                        .to_string(),
+                    ),
                     None => None,
                 };
 
@@ -336,14 +349,18 @@ impl Consul {
             step_start_instant.elapsed().as_millis() as f64,
         );
         let response = result.map_err(|e| {
-                    record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
-                    match e {
-                        ureq::Error::Status(code, response) => {
-                            ConsulError::UnexpectedResponseCode(hyper::StatusCode::from_u16(code).unwrap_or_default(), response.into_string().unwrap_or_default())
-                        },
-                        ureq::Error::Transport(t) => ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string()),
-                    }
-                })?;
+            record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
+            match e {
+                ureq::Error::Status(code, response) => ConsulError::UnexpectedResponseCode(
+                    hyper::StatusCode::from_u16(code).unwrap_or_default(),
+                    response.into_string().unwrap_or_default(),
+                ),
+                ureq::Error::Transport(t) => ConsulError::TransportError(
+                    t.kind(),
+                    t.message().unwrap_or_default().to_string(),
+                ),
+            }
+        })?;
         let status = response.status();
         if status == 200 {
             let val = response.into_string()?;
@@ -686,7 +703,7 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
-        #[cfg(feature="opentelemetry")]
+        #[cfg(feature = "opentelemetry")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
         let method = req.method().clone();
@@ -714,7 +731,7 @@ impl Consul {
 
         let response = response?;
 
-        #[cfg(feature="opentelemetry")]
+        #[cfg(feature = "opentelemetry")]
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
@@ -742,7 +759,7 @@ impl Consul {
             Err(e) => {
                 record_failure_metric_if_enabled(&method, request_name);
 
-                #[cfg(feature="opentelemetry")]
+                #[cfg(feature = "opentelemetry")]
                 span.set_status(Status::error(e.to_string()));
                 Err(ConsulError::InvalidResponse(e))
             }
@@ -1002,14 +1019,10 @@ mod tests {
         };
         let session_id: String;
         {
-            let res = consul
-                .get_lock(req, string_value.as_bytes())
-                .await;
+            let res = consul.get_lock(req, string_value.as_bytes()).await;
             assert!(res.is_ok());
             let mut lock = res.unwrap();
-            let res2 = consul
-                .get_lock(req, string_value.as_bytes())
-                .await;
+            let res2 = consul.get_lock(req, string_value.as_bytes()).await;
             assert!(res2.is_err());
             let err = res2.unwrap_err();
             match err {
@@ -1036,9 +1049,7 @@ mod tests {
             session_id: &session_id,
             ..Default::default()
         };
-        let res = consul
-            .get_lock(req, string_value.as_bytes())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
     }
 
@@ -1054,14 +1065,10 @@ mod tests {
             ..Default::default()
         };
         let start_index: u64;
-        let res = consul
-            .get_lock(req, string_value.as_bytes())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
         let lock = res.unwrap();
-        let res2 = consul
-            .get_lock(req, string_value.as_bytes())
-            .await;
+        let res2 = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res2.is_err());
         let err = res2.unwrap_err();
         match err {
@@ -1085,9 +1092,7 @@ mod tests {
         assert!(res.is_ok());
         std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
 
-        let res = consul
-            .get_lock(req, string_value.as_bytes())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
     }
 
@@ -1146,7 +1151,9 @@ mod tests {
 
         // Key does not exist, with CAS set and modify index set to 0
         // it should be created.
-        let (set, _) = consul.create_or_update_key(req.clone(), string_value1.as_bytes().to_vec()).await
+        let (set, _) = consul
+            .create_or_update_key(req.clone(), string_value1.as_bytes().to_vec())
+            .await
             .expect("failed to create key initially");
         assert!(set);
         let (value, mod_idx1) = get_single_key_value_with_index(&consul, key).await;
@@ -1155,7 +1162,9 @@ mod tests {
         // Subsequent request with CAS set to 0 should not override the
         // value.
         let string_value2 = "This is CAS test - not valid";
-        let (set, _) = consul.create_or_update_key(req, string_value2.as_bytes().to_vec()).await
+        let (set, _) = consul
+            .create_or_update_key(req, string_value2.as_bytes().to_vec())
+            .await
             .expect("failed to run subsequent create_or_update_key");
         assert!(!set);
         // Value and modify index should not have changed because set failed.
@@ -1170,7 +1179,9 @@ mod tests {
             ..Default::default()
         };
         let string_value3 = "This is correct CAS updated";
-        let (set, _) = consul.create_or_update_key(req, string_value3.as_bytes().to_vec()).await
+        let (set, _) = consul
+            .create_or_update_key(req, string_value3.as_bytes().to_vec())
+            .await
             .expect("failed to run create_or_update_key with proper CAS value");
         assert!(set);
         // Verify that value was updated and the index changed.
@@ -1185,7 +1196,9 @@ mod tests {
             ..Default::default()
         };
         let string_value4 = "This is non CAS update";
-        let (set, _) = consul.create_or_update_key(req, string_value4.as_bytes().to_vec()).await
+        let (set, _) = consul
+            .create_or_update_key(req, string_value4.as_bytes().to_vec())
+            .await
             .expect("failed to run create_or_update_key without CAS");
         assert!(set);
         // Verify that value was updated and the index changed.
@@ -1241,8 +1254,7 @@ mod tests {
     }
 
     async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
-        let res = read_key(consul, key).await
-            .expect("failed to read key");
+        let res = read_key(consul, key).await.expect("failed to read key");
         let r = res.into_iter().next().unwrap();
         (r.value, r.modify_index)
     }
