@@ -21,7 +21,7 @@ trace = ["dep:opentelemetry"]
 base64 = "0.21"
 futures = "0.3"
 http = "0.2"
-hyper = { version = "0.14.2", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }
 hyper-rustls = { version = "0.24" }
 lazy_static = { version = "1", optional = true }
 opentelemetry = { version = "0.19", features = ["rt-tokio"], optional = true }
