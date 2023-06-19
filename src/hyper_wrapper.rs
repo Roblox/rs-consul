@@ -25,7 +25,7 @@ SOFTWARE.
 use hyper::Version;
 use opentelemetry::{
     global::{BoxedSpan, BoxedTracer},
-    trace::{Span, StatusCode, Tracer},
+    trace::{Span, Status, Tracer},
     KeyValue,
 };
 
@@ -84,6 +84,6 @@ pub fn annotate_span_for_response<T>(span: &mut BoxedSpan, response: &hyper::Res
     }
 
     if status != hyper::StatusCode::OK {
-        span.set_status(StatusCode::Error, status.as_str().to_owned());
+        span.set_status(Status::error(status.as_str().to_owned()));
     }
 }

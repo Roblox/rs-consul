@@ -39,17 +39,23 @@ use hyper_tls::HttpsConnector;
 
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
-use opentelemetry::global;
-use opentelemetry::global::BoxedTracer;
-use opentelemetry::trace::Span;
-use opentelemetry::trace::StatusCode;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
+#[cfg(feature="opentelemetry")]
+use opentelemetry::global;
+#[cfg(feature="opentelemetry")]
+use opentelemetry::global::BoxedTracer;
+#[cfg(feature="opentelemetry")]
+use opentelemetry::trace::Span;
+#[cfg(feature="opentelemetry")]
+use opentelemetry::trace::Status;
+
 pub use types::*;
 
+#[cfg(feature="opentelemetry")]
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -214,6 +220,7 @@ impl Drop for Lock<'_> {
 pub struct Consul {
     https_client: hyper::Client<HttpsConnector<HttpConnector>, Body>,
     config: Config,
+    #[cfg(feature="opentelemetry")]
     tracer: BoxedTracer,
 }
 
@@ -237,6 +244,7 @@ impl Consul {
         Consul {
             https_client,
             config,
+            #[cfg(feature="opentelemetry")]
             tracer: global::tracer("consul"),
         }
     }
@@ -671,6 +679,7 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
+        #[cfg(feature="opentelemetry")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
         let method = req.method().clone();
@@ -698,6 +707,7 @@ impl Consul {
 
         let response = response?;
 
+        #[cfg(feature="opentelemetry")]
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
@@ -725,7 +735,8 @@ impl Consul {
             Err(e) => {
                 record_failure_metric_if_enabled(&method, request_name);
 
-                span.set_status(StatusCode::Error, e.to_string());
+                #[cfg(feature="opentelemetry")]
+                span.set_status(Status::error(e.to_string()));
                 Err(ConsulError::InvalidResponse(e))
             }
         }
@@ -733,7 +744,7 @@ impl Consul {
 
     fn build_create_or_update_url(&self, request: CreateOrUpdateKeyRequest<'_>) -> String {
         let mut url = String::new();
-        url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key,));
+        url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key));
         let mut added_query_param = false;
         if request.flags != 0 {
             url = add_query_param_separator(url, added_query_param);
@@ -750,9 +761,9 @@ impl Consul {
             url.push_str(&format!("release={}", request.release));
             added_query_param = true;
         }
-        if request.check_and_set != 0 {
+        if let Some(cas_idx) = request.check_and_set {
             url = add_query_param_separator(url, added_query_param);
-            url.push_str(&format!("cas={}", request.check_and_set));
+            url.push_str(&format!("cas={}", cas_idx));
         }
 
         add_namespace_and_datacenter(url, request.namespace, request.datacenter)
@@ -1115,6 +1126,67 @@ mod tests {
         assert_eq!(node.address, host);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn properly_handle_check_and_set() {
+        let consul = get_client();
+        let key = "test/consul/proper_cas_handling";
+        let string_value1 = "This is CAS test";
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: Some(0),
+            ..Default::default()
+        };
+
+        // Key does not exist, with CAS set and modify index set to 0
+        // it should be created.
+        let (set, _) = consul.create_or_update_key(req.clone(), string_value1.as_bytes().to_vec()).await
+            .expect("failed to create key initially");
+        assert!(set);
+        let (value, mod_idx1) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value1, &value.unwrap());
+
+        // Subsequent request with CAS set to 0 should not override the
+        // value.
+        let string_value2 = "This is CAS test - not valid";
+        let (set, _) = consul.create_or_update_key(req, string_value2.as_bytes().to_vec()).await
+            .expect("failed to run subsequent create_or_update_key");
+        assert!(!set);
+        // Value and modify index should not have changed because set failed.
+        let (value, mod_idx2) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value1, &value.unwrap());
+        assert_eq!(mod_idx1, mod_idx2);
+
+        // Successfully set value with proper CAS value.
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: Some(mod_idx1),
+            ..Default::default()
+        };
+        let string_value3 = "This is correct CAS updated";
+        let (set, _) = consul.create_or_update_key(req, string_value3.as_bytes().to_vec()).await
+            .expect("failed to run create_or_update_key with proper CAS value");
+        assert!(set);
+        // Verify that value was updated and the index changed.
+        let (value, mod_idx3) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value3, &value.unwrap());
+        assert_ne!(mod_idx1, mod_idx3);
+
+        // Successfully set value without CAS.
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: None,
+            ..Default::default()
+        };
+        let string_value4 = "This is non CAS update";
+        let (set, _) = consul.create_or_update_key(req, string_value4.as_bytes().to_vec()).await
+            .expect("failed to run create_or_update_key without CAS");
+        assert!(set);
+        // Verify that value was updated and the index changed.
+        let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value4, &value.unwrap());
+        assert_ne!(mod_idx3, mod_idx4);
+    }
+
     fn get_client() -> Consul {
         let conf: Config = Config::from_env();
         Consul::new(conf)
@@ -1159,6 +1231,13 @@ mod tests {
     fn assert_expected_result(res: Result<bool>) {
         assert!(res.is_ok());
         assert!(res.unwrap());
+    }
+
+    async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
+        let res = read_key(consul, key).await
+            .expect("failed to read key");
+        let r = res.into_iter().next().unwrap();
+        (r.value, r.modify_index)
     }
 
     fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse>>, value: &str) {
