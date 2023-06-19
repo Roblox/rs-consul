@@ -156,6 +156,10 @@ pub struct Config {
     pub address: String,
     /// The consul secret token to make authenticated requests to the consul server.
     pub token: Option<String>,
+
+    /// The hyper builder for the internal http client.
+    #[serde(skip)]
+    pub hyper_builder: hyper::client::Builder,
 }
 
 impl Config {
@@ -171,6 +175,7 @@ impl Config {
         Config {
             address: addr,
             token: Some(token),
+            hyper_builder: Default::default(),
         }
     }
 }
@@ -240,7 +245,7 @@ impl Consul {
     /// - [Config](consul::Config)
     pub fn new(config: Config) -> Self {
         let https = https_client();
-        let https_client = hyper::Client::builder().build::<_, hyper::Body>(https);
+        let https_client = config.hyper_builder.build::<_, hyper::Body>(https);
         Consul {
             https_client,
             config,
