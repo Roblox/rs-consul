@@ -8,7 +8,7 @@ on:
 jobs:
   format-code:
     runs-on: "ubuntu-latest"
-    container: rust:1.61.0
+    container: rust:1.70.0
 
     steps:
       - name: Checkout the code on merge
@@ -16,6 +16,9 @@ jobs:
 
       - name: Install Rust Format
         run: rustup component add rustfmt
+
+      - name: Work around permission issue (https://github.blog/2022-04-12-git-security-vulnerability-announced/)
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
 
       - name: Format code
         run: cargo fmt --all

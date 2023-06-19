@@ -3,7 +3,7 @@ version: "3.8"
 services:
   consul:
     container_name: consul
-    image: consul:1.9.3
+    image: consul:1.11.11
     command: >-
       consul
       agent

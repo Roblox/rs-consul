@@ -13,7 +13,7 @@ jobs:
       matrix:
         features: ["", "--no-default-features --features rustls-native"]
     runs-on: "ubuntu-latest"
-    container: rust:1.61.0
+    container: rust:1.70.0
 
     steps:
       - uses: actions/checkout@v2
@@ -26,10 +26,10 @@ jobs:
       matrix:
         features: ["", "--no-default-features --features rustls-native"]
     runs-on: "ubuntu-latest"
-    container: rust:1.61.0
+    container: rust:1.70.0
     services:
       consul:
-        image: consul:1.9.3
+        image: consul:1.11.11
         env:
           # We pass the config as a JSON here to simulate one service with 3 nodes.
           # TODO: Ideally, we should use the same setup in local environment (`testdata/config.hcl`) in GHA test.
