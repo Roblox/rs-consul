@@ -31,6 +31,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{env, str::Utf8Error};
 
+use base64::Engine;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
 use hyper_rustls::HttpsConnector;
@@ -104,11 +105,10 @@ quick_error! {
         ServiceInstanceResolutionFailed(service_name: String) {
             display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
         }
-        /// The request failed either due to an unexpected status code or a transport error.
-        RequestFailedError(err: ureq::Error) {
-            from()
+        /// A transport error occured.
+        TransportError(kind: ureq::ErrorKind, message: String) {
+            display("Transport error: {} - {}", kind, message)
         }
-
     }
 }
 
@@ -264,7 +264,7 @@ impl Consul {
             .into_iter()
             .map(|mut r| {
                 r.value = match r.value {
-                    Some(val) => Some(std::str::from_utf8(&base64::decode(val)?)?.to_string()),
+                    Some(val) => Some(std::str::from_utf8(&base64::engine::general_purpose::STANDARD.decode(val)?)?.to_string()),
                     None => None,
                 };
 
@@ -337,7 +337,12 @@ impl Consul {
         );
         let response = result.map_err(|e| {
                     record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
-                    ConsulError::RequestFailedError(e)
+                    match e {
+                        ureq::Error::Status(code, response) => {
+                            ConsulError::UnexpectedResponseCode(hyper::StatusCode::from_u16(code).unwrap_or_default(), response.into_string().unwrap_or_default())
+                        },
+                        ureq::Error::Transport(t) => ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string()),
+                    }
                 })?;
         let status = response.status();
         if status == 200 {
