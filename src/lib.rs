@@ -34,7 +34,6 @@ use std::{env, str::Utf8Error};
 use base64::Engine;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
-use hyper_rustls::HttpsConnector;
 
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;

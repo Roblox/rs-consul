@@ -1,6 +1,6 @@
 [package]
 name = "rs-consul"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Roblox"]
 edition = "2018"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
@@ -10,11 +10,11 @@ license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["hyper-rustls/rustls-native-certs"]
+default = ["rustls-native"]
 metrics = ["prometheus", "lazy_static"]
 rustls-native = ["hyper-rustls/rustls-native-certs"]
 rustls-webpki = ["hyper-rustls/webpki-roots"]
-opentelemetry = ["dep:opentelemetry"]
+trace = ["dep:opentelemetry"]
 
 # keep this list sorted!
 [dependencies]
