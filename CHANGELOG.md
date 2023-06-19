@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - `rustls-native` (default), and `rustls-webpki` features to allow usage of rustls for the https client.
+- `hyper_builder` field was added to `Config` in order to allow specifying additional hyper options.
 
 ### Changed
 
