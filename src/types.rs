@@ -534,24 +534,41 @@ pub struct Node {
 #[serde(rename_all = "PascalCase")]
 /// The node information as returned by the Consul Catalog API
 pub struct NodeFull {
-    id: String,
-    node: String,
-    address: String,
-    datacenter: String,
-    tagged_addresses: HashMap<String, String>,
-    node_meta: HashMap<String, String>,
-    create_index: u64,
-    modify_index: u64,
-    service_address: Option<String>,
-    service_enable_tag_override: Option<bool>,
+    /// id
+    pub id: String,
+    /// node 
+    pub node: String,
+    /// address
+    pub address: String,
+    /// datacenter
+    pub datacenter: String,
+    /// tagged_addresses
+    pub tagged_addresses: HashMap<String, String>,
+    /// node_meta
+    pub node_meta: HashMap<String, String>,
+    /// create_index
+    pub create_index: u64,
+    /// modify_index
+    pub modify_index: u64,
+    /// service_address
+    pub service_address: Option<String>,
+    /// service_enable_tag_override
+    pub service_enable_tag_override: Option<bool>,
     #[serde(rename = "Service_ID")]
-    service_id: Option<String>,
-    service_name: Option<String>,
-    service_port: Option<u16>,
-    service_meta: HashMap<String, String>,
-    service_tagged_addresses: HashMap<String, String>,
-    service_tags: Vec<String>,
-    namespace: Option<String>,
+    /// service_id
+    pub service_id: Option<String>,
+    /// service_name
+    pub service_name: Option<String>,
+    /// service_port
+    pub service_port: Option<u16>,
+    /// service_meta
+    pub service_meta: HashMap<String, String>,
+    /// service_tagged_addresses
+    pub service_tagged_addresses: HashMap<String, String>,
+    /// service_tags
+    pub service_tags: Vec<String>,
+    ///  namespace
+    pub namespace: Option<String>,
 }
 
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Eq)]

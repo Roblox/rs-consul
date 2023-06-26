@@ -191,6 +191,15 @@ impl Config {
             hyper_builder: Default::default(),
         }
     }
+
+    /// Create a new config from an address and token
+    pub fn new(address: String, token: Option<String>) -> Self {
+        Config {
+            address,
+            token,
+            hyper_builder: Default::default(),
+        }
+    }
 }
 
 /// Represents a lock against Consul.
@@ -1276,7 +1285,7 @@ mod tests {
         for sn in list_response.response.iter() {
             let dereg_request = DeregisterEntityRequest {
                 node: "local",
-                service_id: Some(sn.service.id.as_str()),
+                service_id: Some(sn.service_id.as_ref().unwrap().as_str()),
                 ..Default::default()
             };
             consul.deregister_entity(&dereg_request).await.unwrap();
@@ -1349,7 +1358,7 @@ mod tests {
 
         let addresses: Vec<String> = response
             .iter()
-            .map(|sn| sn.service.address.clone())
+            .map(|sn| sn.service_address.as_ref().unwrap().clone())
             .collect();
         let expected_addresses = vec![
             "1.1.1.1".to_string(),
@@ -1362,7 +1371,7 @@ mod tests {
 
         let _: Vec<_> = response
             .iter()
-            .map(|sn| assert_eq!("dc1", sn.node.datacenter))
+            .map(|sn| assert_eq!("dc1", sn.datacenter))
             .collect();
     }
 
