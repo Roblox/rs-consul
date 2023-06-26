@@ -27,6 +27,10 @@ use std::time::Duration;
 
 use serde::{self, de::Deserializer, de::Error as SerdeError, Deserialize, Serialize, Serializer};
 use smart_default::SmartDefault;
+use base64::{ 
+    Engine, 
+    engine::general_purpose::STANDARD as B64,
+};
 
 // TODO retrofit other get APIs to use this struct
 /// Query options for Consul endpoints.
@@ -623,10 +627,7 @@ pub struct Base64Vec(pub Vec<u8>);
 
 impl Serialize for Base64Vec {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(&base64::display::Base64Display::with_config(
-            &self.0,
-            base64::STANDARD,
-        ))
+        serializer.collect_str(&B64.encode(&self.0))
     }
 }
 
@@ -641,7 +642,7 @@ impl<'de> Deserialize<'de> for Base64Vec {
             }
 
             fn visit_str<E: SerdeError>(self, v: &str) -> Result<Self::Value, E> {
-                base64::decode(v).map(Base64Vec).map_err(SerdeError::custom)
+                B64.decode(v).map(Base64Vec).map_err(SerdeError::custom)
             }
         }
         deserializer.deserialize_str(Vis)

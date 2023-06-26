@@ -34,7 +34,7 @@ use std::{env, str::Utf8Error};
 use base64::Engine;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
-use hyper_rustls::HttpsConnector;
+use hyper_rustls::{ HttpsConnector, HttpsConnectorBuilder };
 #[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
 use lazy_static::lazy_static;
@@ -242,32 +242,48 @@ where
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
-    https_client: hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body>,
+
+    https_client: hyper::Client<HttpsConnector<HttpConnector>, Body>,
     config: Config,
     #[cfg(feature = "trace")]
     tracer: BoxedTracer,
 }
 
-fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
+fn https_connector() -> HttpsConnector<HttpConnector> {
+    #[cfg(feature = "rustls-native")]
+    return HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .build();
     #[cfg(feature = "rustls-webpki")]
-    return hyper_rustls::HttpsConnectorBuilder::new()
+    return HttpsConnectorBuilder::new()
         .with_webpki_roots()
         .https_or_http()
         .enable_http1()
         .build();
-    hyper_rustls::HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .https_or_http()
-        .enable_http1()
-        .build()
+    #[cfg(feature = "default-tls")]
+    {
+        let mut conn = HttpsConnector::new();
+        conn.https_only(false);
+        return conn; 
+    }
 }
 
 impl Clone for Consul {
+    #[cfg(feature = "trace")]
     fn clone(&self) -> Self {
         Consul {
             https_client: self.https_client.clone(),
             config: self.config.clone(),
             tracer: global::tracer("consul"),
+        }
+    }
+    #[cfg(not(feature = "trace"))]
+    fn clone(&self) -> Self {
+        Consul {
+            https_client: self.https_client.clone(),
+            config: self.config.clone(),
         }
     }
 }
