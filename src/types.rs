@@ -532,6 +532,7 @@ pub struct Node {
 /// The node information as returned by the Consul Catalog API
 pub struct NodeFull {
     /// id
+    #[serde(rename = "ID")]
     pub id: String,
     /// node
     pub node: String,
@@ -561,7 +562,7 @@ pub struct NodeFull {
     /// service_meta
     pub service_meta: HashMap<String, String>,
     /// service_tagged_addresses
-    pub service_tagged_addresses: HashMap<String, String>,
+    pub service_tagged_addresses: HashMap<String, HashMap<String, serde_json::Value>>,
     /// service_tags
     pub service_tags: Vec<String>,
     ///  namespace
