@@ -25,12 +25,9 @@ SOFTWARE.
 use std::collections::HashMap;
 use std::time::Duration;
 
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::{self, de::Deserializer, de::Error as SerdeError, Deserialize, Serialize, Serializer};
 use smart_default::SmartDefault;
-use base64::{ 
-    Engine, 
-    engine::general_purpose::STANDARD as B64,
-};
 
 // TODO retrofit other get APIs to use this struct
 /// Query options for Consul endpoints.
@@ -535,8 +532,9 @@ pub struct Node {
 /// The node information as returned by the Consul Catalog API
 pub struct NodeFull {
     /// id
+    #[serde(rename = "ID")]
     pub id: String,
-    /// node 
+    /// node
     pub node: String,
     /// address
     pub address: String,
@@ -564,7 +562,7 @@ pub struct NodeFull {
     /// service_meta
     pub service_meta: HashMap<String, String>,
     /// service_tagged_addresses
-    pub service_tagged_addresses: HashMap<String, String>,
+    pub service_tagged_addresses: HashMap<String, HashMap<String, serde_json::Value>>,
     /// service_tags
     pub service_tags: Vec<String>,
     ///  namespace
@@ -583,7 +581,7 @@ pub struct Service {
     /// The address of the instance.
     pub address: String,
     /// The port of the instance.
-    pub port: u16,
+    pub port: Option<u16>,
 }
 
 pub(crate) fn serialize_duration_as_string<S>(

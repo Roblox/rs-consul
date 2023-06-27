@@ -34,7 +34,7 @@ use std::{env, str::Utf8Error};
 use base64::Engine;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
 #[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
-use hyper_rustls::{ HttpsConnector, HttpsConnectorBuilder };
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 #[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
 use lazy_static::lazy_static;
@@ -251,7 +251,6 @@ where
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
-
     https_client: hyper::Client<HttpsConnector<HttpConnector>, Body>,
     config: Config,
     #[cfg(feature = "trace")]
@@ -275,7 +274,7 @@ fn https_connector() -> HttpsConnector<HttpConnector> {
     {
         let mut conn = HttpsConnector::new();
         conn.https_only(false);
-        return conn; 
+        return conn;
     }
 }
 
@@ -865,7 +864,7 @@ impl Consul {
         &self,
         service_name: &str,
         query_opts: Option<QueryOptions>,
-    ) -> Result<Vec<(String, u16)>> {
+    ) -> Result<Vec<(String, Option<u16>)>> {
         let request = GetServiceNodesRequest {
             service: service_name,
             passing: true,
@@ -903,12 +902,12 @@ impl Consul {
     /// in the health endpoint. These requests models are primarily for the
     /// health endpoints
     /// https://www.consul.io/api-docs/health#list-nodes-for-service
-    fn parse_host_port_from_service_node_response(sn: ServiceNode) -> (String, u16) {
+    fn parse_host_port_from_service_node_response(sn: ServiceNode) -> (String, Option<u16>) {
         (
             if sn.service.address.is_empty() {
                 info!(
-                    "Consul service {service_name} instance had an empty Service address, with port:{port}",
-                    service_name = &sn.service.service, port = sn.service.port
+                    "Consul service {} instance had an empty Service address, with port:{:?}",
+                    &sn.service.service, sn.service.port
                 );
                 sn.node.address
             } else {
@@ -1511,14 +1510,14 @@ mod tests {
             id: "node".to_string(),
             service: "node".to_string(),
             address: "2.2.2.2".to_string(),
-            port: 32,
+            port: Some(32),
         };
 
         let empty_service = Service {
             id: "".to_string(),
             service: "".to_string(),
             address: "".to_string(),
-            port: 32,
+            port: Some(32),
         };
 
         let sn = ServiceNode {
