@@ -13,7 +13,7 @@ jobs:
       matrix:
         features: ["", "--no-default-features --features rustls-native"]
     runs-on: "ubuntu-latest"
-    container: rust:1.70.0
+    container: rust:1.71.0
 
     steps:
       - uses: actions/checkout@v2
@@ -26,7 +26,7 @@ jobs:
       matrix:
         features: ["", "--no-default-features --features rustls-native"]
     runs-on: "ubuntu-latest"
-    container: rust:1.70.0
+    container: rust:1.71.0
     services:
       consul:
         image: consul:1.11.11
