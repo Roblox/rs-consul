@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.4.0 - 2023-08-25
+
+### Changed
+
+- `opentelemetry` updated to version `0.20` from `0.19`.
+
+## 0.3.0 - 2023-06-19
+
 ### Added
 
 - `rustls-native` (default), and `rustls-webpki` features to allow usage of rustls for the https client.
@@ -20,14 +28,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `rustls` updated to `0.24` from `0.22`.
 - `smart_default` updated to `0.7` from `0.6`.
 - `ureq` updated to `2` from `1.5.4`.
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## 0.2.3 - 2022-08-24
 

@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     runs-on: "ubuntu-latest"
-    container: rust:1.71.0
+    container: rust:1.72.0
 
     steps:
       - uses: actions/checkout@v2
