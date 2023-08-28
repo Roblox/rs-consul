@@ -6,10 +6,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: rust:1.52.1
+    container: rust:1.72.0
     services:
       consul:
-        image: consul:1.9.3
+        image: consul:1.11.11
+        env:
+          # We pass the config as a JSON here to simulate one service with 3 nodes.
+          # TODO: Ideally, we should use the same setup in local environment (`testdata/config.hcl`) in GHA test.
+          CONSUL_LOCAL_CONFIG: '{"acl": [{"default_policy": "allow", "enable_token_persistence": true, "enabled": true}], "services": [ {"address": "1.1.1.1", "checks": [], "id": "test-service-1", "name": "test-service", "port": 20001}, {"address": "2.2.2.2", "checks": [], "id": "test-service-2", "name": "test-service", "port": 20002}, {"address": "3.3.3.3", "checks": [], "id": "test-service-3", "name": "test-service", "port": 20003} ]}'
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
 
@@ -21,7 +25,7 @@ jobs:
 
   dry-run:
     runs-on: ubuntu-latest
-    container: rust:1.52.1
+    container: rust:1.72.0
 
     steps:
       - uses: actions/checkout@v2
@@ -32,7 +36,7 @@ jobs:
   publish:
     needs: [test, dry-run]
     runs-on: ubuntu-latest
-    container: rust:1.52.1
+    container: rust:1.72.0
     environment: crates-publish
 
     steps:

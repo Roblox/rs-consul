@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2021 Roblox
+Copyright (c) 2023 Roblox
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -28,22 +28,31 @@ SOFTWARE.
 #![deny(missing_docs)]
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{env, str::Utf8Error};
 
+use base64::Engine;
 use hyper::{body::Buf, client::HttpConnector, Body, Method};
-use hyper_tls::HttpsConnector;
-use opentelemetry::global;
-use opentelemetry::global::BoxedTracer;
-use opentelemetry::trace::Span;
-use opentelemetry::trace::StatusCode;
+#[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
+#[cfg(feature = "metrics")]
+use lazy_static::lazy_static;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
+#[cfg(feature = "trace")]
+use opentelemetry::global;
+#[cfg(feature = "trace")]
+use opentelemetry::global::BoxedTracer;
+#[cfg(feature = "trace")]
+use opentelemetry::trace::Span;
+#[cfg(feature = "trace")]
+use opentelemetry::trace::Status;
+
 pub use types::*;
 
+#[cfg(feature = "trace")]
 mod hyper_wrapper;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
@@ -94,8 +103,49 @@ quick_error! {
         ServiceInstanceResolutionFailed(service_name: String) {
             display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
         }
+        /// A transport error occured.
+        TransportError(kind: ureq::ErrorKind, message: String) {
+            display("Transport error: {} - {}", kind, message)
+        }
     }
 }
+
+#[cfg(feature = "metrics")]
+lazy_static! {
+    static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
+        prometheus::opts!("consul_requests_total", "Total requests made to consul"),
+        &["method", "function"]
+    )
+    .unwrap();
+    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec =
+        prometheus::register_counter_vec!(
+            prometheus::opts!(
+                "consul_requests_failed_total",
+                "Total requests made to consul that failed"
+            ),
+            &["method", "function"]
+        )
+        .unwrap();
+    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec =
+        prometheus::register_histogram_vec!(
+            prometheus::histogram_opts!(
+                "consul_requests_duration_milliseconds",
+                "Time it takes for a consul request to complete"
+            ),
+            &["method", "function"]
+        )
+        .unwrap();
+}
+
+const READ_KEY_METHOD_NAME: &str = "read_key";
+const CREATE_OR_UPDATE_KEY_METHOD_NAME: &str = "create_or_update_key";
+const CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME: &str = "create_or_update_key_sync";
+const DELETE_KEY_METHOD_NAME: &str = "delete_key";
+const GET_LOCK_METHOD_NAME: &str = "get_lock";
+const REGISTER_ENTITY_METHOD_NAME: &str = "register_entity";
+const GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME: &str = "get_all_registered_service_names";
+const GET_SERVICE_NODES_METHOD_NAME: &str = "get_service_nodes";
+const GET_SESSION_METHOD_NAME: &str = "get_session";
 
 pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
 
@@ -106,6 +156,10 @@ pub struct Config {
     pub address: String,
     /// The consul secret token to make authenticated requests to the consul server.
     pub token: Option<String>,
+
+    /// The hyper builder for the internal http client.
+    #[serde(skip)]
+    pub hyper_builder: hyper::client::Builder,
 }
 
 impl Config {
@@ -121,6 +175,7 @@ impl Config {
         Config {
             address: addr,
             token: Some(token),
+            hyper_builder: Default::default(),
         }
     }
 }
@@ -168,9 +223,24 @@ impl Drop for Lock<'_> {
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
-    https_client: hyper::Client<HttpsConnector<HttpConnector>, Body>,
+    https_client: hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body>,
     config: Config,
+    #[cfg(feature = "trace")]
     tracer: BoxedTracer,
+}
+
+fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
+    #[cfg(feature = "rustls-webpki")]
+    return hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .build();
+    hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .build()
 }
 
 impl Consul {
@@ -179,11 +249,12 @@ impl Consul {
     /// #Arguments:
     /// - [Config](consul::Config)
     pub fn new(config: Config) -> Self {
-        let https = HttpsConnector::new();
-        let https_client = hyper::Client::builder().build::<_, hyper::Body>(https);
+        let https = https_connector();
+        let https_client = config.hyper_builder.build::<_, hyper::Body>(https);
         Consul {
             https_client,
             config,
+            #[cfg(feature = "trace")]
             tracer: global::tracer("consul"),
         }
     }
@@ -196,7 +267,7 @@ impl Consul {
     pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
         let req = self.build_read_key_req(request);
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::empty(), None)
+            .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
@@ -204,7 +275,12 @@ impl Consul {
             .into_iter()
             .map(|mut r| {
                 r.value = match r.value {
-                    Some(val) => Some(std::str::from_utf8(&base64::decode(val)?)?.to_string()),
+                    Some(val) => Some(
+                        std::str::from_utf8(
+                            &base64::engine::general_purpose::STANDARD.decode(val)?,
+                        )?
+                        .to_string(),
+                    ),
                     None => None,
                 };
 
@@ -228,7 +304,14 @@ impl Consul {
     ) -> Result<(bool, u64)> {
         let url = self.build_create_or_update_url(request);
         let req = hyper::Request::builder().method(Method::PUT).uri(url);
-        let (mut response_body, index) = self.execute_request(req, Body::from(value), None).await?;
+        let (mut response_body, index) = self
+            .execute_request(
+                req,
+                Body::from(value),
+                None,
+                CREATE_OR_UPDATE_KEY_METHOD_NAME,
+            )
+            .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         Ok((
             serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?,
@@ -253,21 +336,43 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-        let res = ureq::put(&url)
+
+        record_request_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
+        let step_start_instant = Instant::now();
+        let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
                 &self.config.token.clone().unwrap_or_default(),
             )
             .send_bytes(&value);
 
-        let status = res.status();
+        record_duration_metric_if_enabled(
+            &Method::PUT,
+            CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME,
+            step_start_instant.elapsed().as_millis() as f64,
+        );
+        let response = result.map_err(|e| {
+            record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
+            match e {
+                ureq::Error::Status(code, response) => ConsulError::UnexpectedResponseCode(
+                    hyper::StatusCode::from_u16(code).unwrap_or_default(),
+                    response.into_string().unwrap_or_default(),
+                ),
+                ureq::Error::Transport(t) => ConsulError::TransportError(
+                    t.kind(),
+                    t.message().unwrap_or_default().to_string(),
+                ),
+            }
+        })?;
+        let status = response.status();
         if status == 200 {
-            let val = res.into_string()?;
+            let val = response.into_string()?;
             let response: bool = std::str::FromStr::from_str(val.trim())?;
             return Ok(response);
         }
 
-        let body = res.into_string()?;
+        let body = response.into_string()?;
+        record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         Err(ConsulError::SyncUnexpectedResponseCode(status, body))
     }
 
@@ -290,10 +395,10 @@ impl Consul {
         url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::empty(), None)
+            .execute_request(req, hyper::Body::empty(), None, DELETE_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
+        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
@@ -318,7 +423,7 @@ impl Consul {
                 timeout: request.timeout,
                 key: request.key.to_string(),
                 session_id: session.id,
-                consul: &self,
+                consul: self,
                 datacenter: request.datacenter.to_string(),
                 namespace: request.namespace.to_string(),
                 value: Some(value_copy),
@@ -334,7 +439,12 @@ impl Consul {
             };
             let lock_index_req = self.build_read_key_req(watch_req);
             let (_watch, index) = self
-                .execute_request(lock_index_req, hyper::Body::empty(), None)
+                .execute_request(
+                    lock_index_req,
+                    hyper::Body::empty(),
+                    None,
+                    GET_LOCK_METHOD_NAME,
+                )
                 .await?;
             Err(ConsulError::LockAcquisitionFailure(index))
         }
@@ -371,8 +481,13 @@ impl Consul {
         let uri = format!("{}/v1/catalog/register", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
-        self.execute_request(request, payload.into(), Some(Duration::from_secs(5)))
-            .await?;
+        self.execute_request(
+            request,
+            payload.into(),
+            Some(Duration::from_secs(5)),
+            REGISTER_ENTITY_METHOD_NAME,
+        )
+        .await?;
         Ok(())
     }
 
@@ -394,7 +509,12 @@ impl Consul {
             .method(Method::GET)
             .uri(uri.clone());
         let (mut response_body, index) = self
-            .execute_request(request, hyper::Body::empty(), query_opts.timeout)
+            .execute_request(
+                request,
+                hyper::Body::empty(),
+                query_opts.timeout,
+                GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME,
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let service_tags_by_name = serde_json::from_slice::<HashMap<String, Vec<String>>>(&bytes)
@@ -421,7 +541,12 @@ impl Consul {
         let query_opts = query_opts.unwrap_or_default();
         let req = self.build_get_service_nodes_req(request, &query_opts);
         let (mut response_body, index) = self
-            .execute_request(req, hyper::Body::empty(), query_opts.timeout)
+            .execute_request(
+                req,
+                hyper::Body::empty(),
+                query_opts.timeout,
+                GET_SERVICE_NODES_METHOD_NAME,
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
         let response = serde_json::from_slice::<GetServiceNodesResponse>(&bytes)
@@ -579,10 +704,15 @@ impl Consul {
         let create_session_json =
             serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
         let (mut response_body, _index) = self
-            .execute_request(req, hyper::Body::from(create_session_json), None)
+            .execute_request(
+                req,
+                hyper::Body::from(create_session_json),
+                None,
+                GET_SESSION_METHOD_NAME,
+            )
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        Ok(serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)?)
+        serde_json::from_slice(&bytes).map_err(ConsulError::ResponseDeserializationFailed)
     }
 
     fn build_get_service_nodes_req(
@@ -612,6 +742,7 @@ impl Consul {
         req: http::request::Builder,
         body: hyper::Body,
         duration: Option<std::time::Duration>,
+        request_name: &str,
     ) -> Result<(Box<dyn Buf>, u64)> {
         let req = req
             .header(
@@ -620,27 +751,46 @@ impl Consul {
             )
             .body(body);
         let req = req.map_err(ConsulError::RequestError)?;
+        #[cfg(feature = "trace")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
+
+        let method = req.method().clone();
+        record_request_metric_if_enabled(&method, request_name);
         let future = self.https_client.request(req);
 
+        let step_start_instant = Instant::now();
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
-                Ok(resp) => resp.map_err(ConsulError::ResponseError)?,
-                Err(_) => return Err(ConsulError::TimeoutExceeded(dur)),
+                Ok(resp) => resp.map_err(ConsulError::ResponseError),
+                Err(_) => Err(ConsulError::TimeoutExceeded(dur)),
             }
         } else {
-            future.await.map_err(ConsulError::ResponseError)?
+            future.await.map_err(ConsulError::ResponseError)
         };
 
+        record_duration_metric_if_enabled(
+            &method,
+            request_name,
+            step_start_instant.elapsed().as_millis() as f64,
+        );
+        if response.is_err() {
+            record_failure_metric_if_enabled(&method, request_name);
+        }
+
+        let response = response?;
+
+        #[cfg(feature = "trace")]
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {
+            record_failure_metric_if_enabled(&method, request_name);
+
             let mut response_body = hyper::body::aggregate(response.into_body())
                 .await
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
             let bytes = response_body.copy_to_bytes(response_body.remaining());
-            let resp = std::str::from_utf8(&*bytes)
+            let resp = std::str::from_utf8(&bytes)
                 .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
             return Err(ConsulError::UnexpectedResponseCode(
                 status,
@@ -655,7 +805,10 @@ impl Consul {
         match hyper::body::aggregate(response.into_body()).await {
             Ok(body) => Ok((Box::new(body), index)),
             Err(e) => {
-                span.set_status(StatusCode::Error, e.to_string());
+                record_failure_metric_if_enabled(&method, request_name);
+
+                #[cfg(feature = "trace")]
+                span.set_status(Status::error(e.to_string()));
                 Err(ConsulError::InvalidResponse(e))
             }
         }
@@ -663,7 +816,7 @@ impl Consul {
 
     fn build_create_or_update_url(&self, request: CreateOrUpdateKeyRequest<'_>) -> String {
         let mut url = String::new();
-        url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key,));
+        url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key));
         let mut added_query_param = false;
         if request.flags != 0 {
             url = add_query_param_separator(url, added_query_param);
@@ -680,9 +833,9 @@ impl Consul {
             url.push_str(&format!("release={}", request.release));
             added_query_param = true;
         }
-        if request.check_and_set != 0 {
+        if let Some(cas_idx) = request.check_and_set {
             url = add_query_param_separator(url, added_query_param);
-            url.push_str(&format!("cas={}", request.check_and_set));
+            url.push_str(&format!("cas={}", cas_idx));
         }
 
         add_namespace_and_datacenter(url, request.namespace, request.datacenter)
@@ -715,7 +868,11 @@ fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut sepa
         uri.push_str(&format!("{}index={}", separator, idx));
         separator = '&';
         if let Some(wait) = query_opts.wait {
-            uri.push_str(&format!("{}wait={}", separator, wait.as_secs()));
+            uri.push_str(&format!(
+                "{}wait={}",
+                separator,
+                types::duration_as_string(&wait)
+            ));
         }
     }
 }
@@ -751,6 +908,32 @@ fn buf_to_vec(buf: Box<dyn hyper::body::Buf>) -> Vec<u8> {
   buf.copy_to_slice(vector.as_mut_slice());
   vector
 }
+
+fn record_request_metric_if_enabled(_method: &Method, _function: &str) {
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_TOTAL
+            .with_label_values(&[_method.as_str(), _function])
+            .inc();
+    }
+}
+
+fn record_failure_metric_if_enabled(_method: &Method, _function: &str) {
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_FAILED_TOTAL
+            .with_label_values(&[_method.as_str(), _function])
+            .inc();
+    }
+}
+
+fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duration: f64) {
+    #[cfg(feature = "metrics")]
+    {
+        CONSUL_REQUESTS_DURATION_MS
+            .with_label_values(&[_method.as_str(), _function])
+            .observe(_duration);
+    }
 
 #[cfg(test)]
 mod tests {
@@ -835,32 +1018,31 @@ mod tests {
         let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
         assert_eq!(response.len(), 0);
 
-        // TODO: Make these tests pass for nomad and crdb.
-        // let req = GetServiceNodesRequest {
-        //     service: "nomad",
-        //     passing: false,
-        //     ..Default::default()
-        // };
-        // let res = consul.get_service_nodes(req).await.unwrap();
-        // assert_eq!(res.len(), 3);
+        let req = GetServiceNodesRequest {
+            service: "test-service",
+            passing: true,
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
+        assert_eq!(response.len(), 3);
 
-        // let req = GetServiceNodesRequest {
-        //     service: "crdb-test-service-one",
-        //     passing: true,
-        //     ..Default::default()
-        // };
-        // let res = consul.get_service_nodes(req).await.unwrap();
-        // assert_eq!(res.len(), 3);
+        let addresses: Vec<String> = response
+            .iter()
+            .map(|sn| sn.service.address.clone())
+            .collect();
+        let expected_addresses = vec![
+            "1.1.1.1".to_string(),
+            "2.2.2.2".to_string(),
+            "3.3.3.3".to_string(),
+        ];
+        assert!(expected_addresses
+            .iter()
+            .all(|item| addresses.contains(item)));
 
-        // let addresses: Vec<String> = res.into_iter().map(|sn| sn.service.address).collect();
-        // let expected_addresses = vec![
-        //     "cockroachdb-node-1.".to_string(),
-        //     "cockroachdb-node-2.".to_string(),
-        //     "cockroachdb-node-3.".to_string(),
-        // ];
-        // assert!(expected_addresses
-        //     .iter()
-        //     .all(|item| addresses.contains(item)));
+        let _: Vec<_> = response
+            .iter()
+            .map(|sn| assert_eq!("dc1", sn.node.datacenter))
+            .collect();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -900,14 +1082,10 @@ mod tests {
         };
         let session_id: String;
         {
-            let res = consul
-                .get_lock(req, &string_value.as_bytes().to_vec())
-                .await;
+            let res = consul.get_lock(req, string_value.as_bytes()).await;
             assert!(res.is_ok());
             let mut lock = res.unwrap();
-            let res2 = consul
-                .get_lock(req, &string_value.as_bytes().to_vec())
-                .await;
+            let res2 = consul.get_lock(req, string_value.as_bytes()).await;
             assert!(res2.is_err());
             let err = res2.unwrap_err();
             match err {
@@ -925,7 +1103,7 @@ mod tests {
 
         sleep(Duration::from_secs(2)).await;
         let key_resp = read_key(&consul, key).await;
-        verify_single_value_matches(key_resp, &new_string_value);
+        verify_single_value_matches(key_resp, new_string_value);
 
         let req = LockRequest {
             key,
@@ -934,9 +1112,7 @@ mod tests {
             session_id: &session_id,
             ..Default::default()
         };
-        let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
     }
 
@@ -952,14 +1128,10 @@ mod tests {
             ..Default::default()
         };
         let start_index: u64;
-        let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
         let lock = res.unwrap();
-        let res2 = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
-            .await;
+        let res2 = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res2.is_err());
         let err = res2.unwrap_err();
         match err {
@@ -983,9 +1155,7 @@ mod tests {
         assert!(res.is_ok());
         std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
 
-        let res = consul
-            .get_lock(req, &string_value.as_bytes().to_vec())
-            .await;
+        let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
     }
 
@@ -995,6 +1165,7 @@ mod tests {
             id: "node".to_string(),
             node: "node".to_string(),
             address: "1.1.1.1".to_string(),
+            datacenter: "datacenter".to_string(),
         };
 
         let service = Service {
@@ -1030,6 +1201,75 @@ mod tests {
         assert_eq!(node.address, host);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn properly_handle_check_and_set() {
+        let consul = get_client();
+        let key = "test/consul/proper_cas_handling";
+        let string_value1 = "This is CAS test";
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: Some(0),
+            ..Default::default()
+        };
+
+        // Key does not exist, with CAS set and modify index set to 0
+        // it should be created.
+        let (set, _) = consul
+            .create_or_update_key(req.clone(), string_value1.as_bytes().to_vec())
+            .await
+            .expect("failed to create key initially");
+        assert!(set);
+        let (value, mod_idx1) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value1, &value.unwrap());
+
+        // Subsequent request with CAS set to 0 should not override the
+        // value.
+        let string_value2 = "This is CAS test - not valid";
+        let (set, _) = consul
+            .create_or_update_key(req, string_value2.as_bytes().to_vec())
+            .await
+            .expect("failed to run subsequent create_or_update_key");
+        assert!(!set);
+        // Value and modify index should not have changed because set failed.
+        let (value, mod_idx2) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value1, &value.unwrap());
+        assert_eq!(mod_idx1, mod_idx2);
+
+        // Successfully set value with proper CAS value.
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: Some(mod_idx1),
+            ..Default::default()
+        };
+        let string_value3 = "This is correct CAS updated";
+        let (set, _) = consul
+            .create_or_update_key(req, string_value3.as_bytes().to_vec())
+            .await
+            .expect("failed to run create_or_update_key with proper CAS value");
+        assert!(set);
+        // Verify that value was updated and the index changed.
+        let (value, mod_idx3) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value3, &value.unwrap());
+        assert_ne!(mod_idx1, mod_idx3);
+
+        // Successfully set value without CAS.
+        let req = CreateOrUpdateKeyRequest {
+            key,
+            check_and_set: None,
+            ..Default::default()
+        };
+        let string_value4 = "This is non CAS update";
+        let (set, _) = consul
+            .create_or_update_key(req, string_value4.as_bytes().to_vec())
+            .await
+            .expect("failed to run create_or_update_key without CAS");
+        assert!(set);
+        // Verify that value was updated and the index changed.
+        let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
+        assert_eq!(string_value4, &value.unwrap());
+        assert_ne!(mod_idx3, mod_idx4);
+    }
+
     fn get_client() -> Consul {
         let conf: Config = Config::from_env();
         Consul::new(conf)
@@ -1044,9 +1284,9 @@ mod tests {
             key,
             ..Default::default()
         };
-        Ok(consul
+        consul
             .create_or_update_key(req, value.as_bytes().to_vec())
-            .await?)
+            .await
     }
 
     async fn read_key(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
@@ -1074,6 +1314,12 @@ mod tests {
     fn assert_expected_result(res: Result<bool>) {
         assert!(res.is_ok());
         assert!(res.unwrap());
+    }
+
+    async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
+        let res = read_key(consul, key).await.expect("failed to read key");
+        let r = res.into_iter().next().unwrap();
+        (r.value, r.modify_index)
     }
 
     fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse>>, value: &str) {

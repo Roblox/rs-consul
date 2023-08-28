@@ -1,31 +1,35 @@
 [package]
 name = "rs-consul"
-version = "0.2.0"
+version = "0.4.0"
 authors = ["Roblox"]
-edition = "2018"
+edition = "2021"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
 readme = "README.md"
 repository = "https://github.com/Roblox/rs-consul"
-license = "MIT"
 license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["rustls-native"]
+metrics = ["prometheus", "lazy_static"]
+rustls-native = ["hyper-rustls/rustls-native-certs"]
+rustls-webpki = ["hyper-rustls/webpki-roots"]
+trace = ["dep:opentelemetry"]
 
 # keep this list sorted!
 [dependencies]
-base64 = "0.13.0"
-futures = "0.3.8"
-http = "0.2.1"
-hyper = { version = "0.14.2", features = ["full"] }
-hyper-tls = "0.5.0"
-opentelemetry = { version = "0.15", features = ["tokio", "rt-tokio"] }
-quick-error = "2.0"
+base64 = "0.21"
+futures = "0.3"
+http = "0.2"
+hyper = { version = "0.14", features = ["full"] }
+hyper-rustls = { version = "0.24" }
+lazy_static = { version = "1", optional = true }
+opentelemetry = { version = "0.20", features = ["rt-tokio"], optional = true }
+prometheus = { version = "0.13", optional = true }
+quick-error = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-slog-scope = "4.3"
-smart-default = "0.6.0"
-tokio = { version = "1.1.1", features = ["full"] }
-ureq = { version = "1.5.4", features = ["json"] }
-
-[dev-dependencies]
-base64 = "0.13.0"
+slog-scope = "4"
+smart-default = "0.7"
+tokio = { version = "1", features = ["full"] }
+ureq = { version = "2", features = ["json"] }
