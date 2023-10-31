@@ -143,6 +143,7 @@ const CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME: &str = "create_or_update_key_sync";
 const DELETE_KEY_METHOD_NAME: &str = "delete_key";
 const GET_LOCK_METHOD_NAME: &str = "get_lock";
 const REGISTER_ENTITY_METHOD_NAME: &str = "register_entity";
+const DEREGISTER_ENTITY_METHOD_NAME: &str = "deregister_entity";
 const GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME: &str = "get_all_registered_service_names";
 const GET_SERVICE_NODES_METHOD_NAME: &str = "get_service_nodes";
 const GET_SESSION_METHOD_NAME: &str = "get_session";
@@ -486,6 +487,28 @@ impl Consul {
             payload.into(),
             Some(Duration::from_secs(5)),
             REGISTER_ENTITY_METHOD_NAME,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Removes entries from consul's global catalog.
+    /// See https://www.consul.io/api-docs/catalog#deregister-entity for more information.
+    /// # Arguments:
+    /// - payload: The [`DeregisterEntityPayload`](DeregisterEntityPayload) to provide the register entity API.
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn deregister_entity(
+        &self,
+        payload: &DeregisterEntityPayload) -> Result<()> {
+        let uri = format!("{}/v1/catalog/deregister", self.config.address);
+        let request = hyper::Request::builder().method(Method::PUT).uri(uri);
+        let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
+        self.execute_request(
+            request,
+            payload.into(),
+            Some(Duration::from_secs(5)),
+            DEREGISTER_ENTITY_METHOD_NAME,
         )
         .await?;
         Ok(())
@@ -945,6 +968,69 @@ mod tests {
             .await
             .expect("expected get_registered_service_names request to succeed");
         assert!(service_names_after_register.contains(&new_service_name));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_deregister_and_retrieve_services() {
+        let consul = get_client();
+
+        let new_service_name = "test-service-44".to_string();
+
+        // verify a service by this name is currently not registered
+        let ResponseMeta {
+            response: service_names_before_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(!service_names_before_register.contains(&new_service_name));
+
+        let node = "local".to_string();
+
+        // register a new service
+        let payload = RegisterEntityPayload {
+            ID: None,
+            Node: node.clone(),
+            Address: "127.0.0.1".to_string(),
+            Datacenter: None,
+            TaggedAddresses: Default::default(),
+            NodeMeta: Default::default(),
+            Service: Some(RegisterEntityService {
+                ID: None,
+                Service: new_service_name.clone(),
+                Tags: vec![],
+                TaggedAddresses: Default::default(),
+                Meta: Default::default(),
+                Port: Some(42424),
+                Namespace: None,
+            }),
+            Check: None,
+            SkipNodeUpdate: None,
+        };
+        consul
+            .register_entity(&payload)
+            .await
+            .expect("expected register_entity request to succeed");
+        let payload = DeregisterEntityPayload { 
+            Node: Some(node), 
+            Datacenter: None, 
+            CheckID: None, 
+            ServiceID: None, 
+            Namespace:  None,
+        };
+        consul.deregister_entity(&payload)
+            .await
+            .expect("expected deregister_entity request to succeed");
+        // verify the newly registered service is retrieved
+        let ResponseMeta {
+            response: service_names_after_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(!service_names_after_register.contains(&new_service_name));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
