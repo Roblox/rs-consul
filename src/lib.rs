@@ -498,9 +498,7 @@ impl Consul {
     /// - payload: The [`DeregisterEntityPayload`](DeregisterEntityPayload) to provide the register entity API.
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn deregister_entity(
-        &self,
-        payload: &DeregisterEntityPayload) -> Result<()> {
+    pub async fn deregister_entity(&self, payload: &DeregisterEntityPayload) -> Result<()> {
         let uri = format!("{}/v1/catalog/deregister", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
@@ -936,14 +934,15 @@ mod tests {
         let node_id = "local";
         register_entity(&consul, &new_service_name, node_id).await;
 
-        let payload = DeregisterEntityPayload { 
-            Node: Some(node_id.to_string()), 
-            Datacenter: None, 
-            CheckID: None, 
-            ServiceID: None, 
-            Namespace:  None,
+        let payload = DeregisterEntityPayload {
+            Node: Some(node_id.to_string()),
+            Datacenter: None,
+            CheckID: None,
+            ServiceID: None,
+            Namespace: None,
         };
-        consul.deregister_entity(&payload)
+        consul
+            .deregister_entity(&payload)
             .await
             .expect("expected deregister_entity request to succeed");
 
@@ -1213,7 +1212,7 @@ mod tests {
         assert_ne!(mod_idx3, mod_idx4);
     }
 
-    async fn register_entity(consul: &Consul, service_name: &String, node_id: &str)  {
+    async fn register_entity(consul: &Consul, service_name: &String, node_id: &str) {
         let ResponseMeta {
             response: service_names_before_register,
             ..
