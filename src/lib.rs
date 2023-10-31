@@ -923,97 +923,21 @@ mod tests {
         let consul = get_client();
 
         let new_service_name = "test-service-44".to_string();
+        register_entity(&consul, &new_service_name, "local").await;
 
-        // verify a service by this name is currently not registered
-        let ResponseMeta {
-            response: service_names_before_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        assert!(!service_names_before_register.contains(&new_service_name));
-
-        // register a new service
-        let payload = RegisterEntityPayload {
-            ID: None,
-            Node: "local".to_string(),
-            Address: "127.0.0.1".to_string(),
-            Datacenter: None,
-            TaggedAddresses: Default::default(),
-            NodeMeta: Default::default(),
-            Service: Some(RegisterEntityService {
-                ID: None,
-                Service: new_service_name.clone(),
-                Tags: vec![],
-                TaggedAddresses: Default::default(),
-                Meta: Default::default(),
-                Port: Some(42424),
-                Namespace: None,
-            }),
-            Check: None,
-            SkipNodeUpdate: None,
-        };
-        consul
-            .register_entity(&payload)
-            .await
-            .expect("expected register_entity request to succeed");
-
-        // verify the newly registered service is retrieved
-        let ResponseMeta {
-            response: service_names_after_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        assert!(service_names_after_register.contains(&new_service_name));
+        assert!(is_registered(&consul, &new_service_name).await);
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_deregister_and_retrieve_services() {
         let consul = get_client();
 
-        let new_service_name = "test-service-44".to_string();
+        let new_service_name = "test-service-45".to_string();
+        let node_id = "local";
+        register_entity(&consul, &new_service_name, node_id).await;
 
-        // verify a service by this name is currently not registered
-        let ResponseMeta {
-            response: service_names_before_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        assert!(!service_names_before_register.contains(&new_service_name));
-
-        let node = "local".to_string();
-
-        // register a new service
-        let payload = RegisterEntityPayload {
-            ID: None,
-            Node: node.clone(),
-            Address: "127.0.0.1".to_string(),
-            Datacenter: None,
-            TaggedAddresses: Default::default(),
-            NodeMeta: Default::default(),
-            Service: Some(RegisterEntityService {
-                ID: None,
-                Service: new_service_name.clone(),
-                Tags: vec![],
-                TaggedAddresses: Default::default(),
-                Meta: Default::default(),
-                Port: Some(42424),
-                Namespace: None,
-            }),
-            Check: None,
-            SkipNodeUpdate: None,
-        };
-        consul
-            .register_entity(&payload)
-            .await
-            .expect("expected register_entity request to succeed");
         let payload = DeregisterEntityPayload { 
-            Node: Some(node), 
+            Node: Some(node_id.to_string()), 
             Datacenter: None, 
             CheckID: None, 
             ServiceID: None, 
@@ -1022,15 +946,8 @@ mod tests {
         consul.deregister_entity(&payload)
             .await
             .expect("expected deregister_entity request to succeed");
-        // verify the newly registered service is retrieved
-        let ResponseMeta {
-            response: service_names_after_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        assert!(!service_names_after_register.contains(&new_service_name));
+
+        assert!(!is_registered(&consul, &new_service_name).await);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1294,6 +1211,52 @@ mod tests {
         let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
         assert_eq!(string_value4, &value.unwrap());
         assert_ne!(mod_idx3, mod_idx4);
+    }
+
+    async fn register_entity(consul: &Consul, service_name: &String, node_id: &str)  {
+        let ResponseMeta {
+            response: service_names_before_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        assert!(!service_names_before_register.contains(service_name));
+
+        let payload = RegisterEntityPayload {
+            ID: None,
+            Node: node_id.to_string(),
+            Address: "127.0.0.1".to_string(),
+            Datacenter: None,
+            TaggedAddresses: Default::default(),
+            NodeMeta: Default::default(),
+            Service: Some(RegisterEntityService {
+                ID: None,
+                Service: service_name.clone(),
+                Tags: vec![],
+                TaggedAddresses: Default::default(),
+                Meta: Default::default(),
+                Port: Some(42424),
+                Namespace: None,
+            }),
+            Check: None,
+            SkipNodeUpdate: None,
+        };
+        consul
+            .register_entity(&payload)
+            .await
+            .expect("expected register_entity request to succeed");
+    }
+
+    async fn is_registered(consul: &Consul, service_name: &String) -> bool {
+        let ResponseMeta {
+            response: service_names_after_register,
+            ..
+        } = consul
+            .get_all_registered_service_names(None)
+            .await
+            .expect("expected get_registered_service_names request to succeed");
+        service_names_after_register.contains(service_name)
     }
 
     fn get_client() -> Consul {
