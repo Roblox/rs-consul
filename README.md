@@ -53,3 +53,5 @@ For contributions, please:
 ## License
 
 rs-consul is available under the MIT license. See [LICENSE](LICENSE) for details.
+
+Test change
