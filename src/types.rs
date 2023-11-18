@@ -320,6 +320,28 @@ pub struct RegisterEntityPayload {
     pub SkipNodeUpdate: Option<bool>,
 }
 
+/// The service to deregister with consul's global catalog.
+/// See https://www.consul.io/api/agent/service for more information.
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeregisterEntityPayload {
+    /// The node to execute the check on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Node: Option<String>,
+    /// The datacenter to register in, defaults to the agent's datacenter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Datacenter: Option<String>,
+    /// Specifies the ID of the check to remove.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CheckID: Option<String>,
+    /// Specifies the ID of the service to remove. The service and all associated checks will be removed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ServiceID: Option<String>,
+    /// Specifies the namespace of the service and checks you deregister.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Namespace: Option<String>,
+}
+
 /// The service to register with consul's global catalog.
 /// See https://www.consul.io/api/agent/service for more information.
 #[allow(non_snake_case)]
