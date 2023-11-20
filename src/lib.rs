@@ -237,6 +237,8 @@ fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
         .https_or_http()
         .enable_http1()
         .build();
+    #[allow(unreachable_code)]
+    // Clippy doesn't realize if the feature is disabled, this code would execute.
     hyper_rustls::HttpsConnectorBuilder::new()
         .with_native_roots()
         .https_or_http()
@@ -1069,20 +1071,19 @@ mod tests {
             lock_delay: std::time::Duration::from_secs(0),
             ..Default::default()
         };
-        let start_index: u64;
         let res = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res.is_ok());
         let lock = res.unwrap();
         let res2 = consul.get_lock(req, string_value.as_bytes()).await;
         assert!(res2.is_err());
         let err = res2.unwrap_err();
-        match err {
-            ConsulError::LockAcquisitionFailure(index) => start_index = index,
+        let start_index = match err {
+            ConsulError::LockAcquisitionFailure(index) => index,
             _ => panic!(
                 "Expected ConsulError::LockAcquisitionFailure, got {:#?}",
                 err
             ),
-        }
+        };
 
         assert!(start_index > 0);
         let watch_req = LockWatchRequest {
