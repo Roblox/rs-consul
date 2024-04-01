@@ -6,7 +6,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: rust:1.74
+    container: rust:1.77
     services:
       consul:
         image: consul:1.11.11
@@ -25,7 +25,7 @@ jobs:
 
   dry-run:
     runs-on: ubuntu-latest
-    container: rust:1.74
+    container: rust:1.77
 
     steps:
       - uses: actions/checkout@v2
