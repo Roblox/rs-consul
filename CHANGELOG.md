@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.6.0 - 2024-04-01
+
+### Changed
+
+- `opentelemetry` updated to version `0.22` from `0.21`.
+- `base64` updated to version `0.22` from `0.21`.
+
 ## 0.5.0 - 2023-11-20
 
 ### Added

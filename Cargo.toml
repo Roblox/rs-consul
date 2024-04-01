@@ -1,6 +1,6 @@
 [package]
 name = "rs-consul"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Roblox"]
 edition = "2021"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
@@ -18,13 +18,13 @@ trace = ["dep:opentelemetry"]
 
 # keep this list sorted!
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 futures = "0.3"
 http = "0.2"
 hyper = { version = "0.14", features = ["full"] }
 hyper-rustls = { version = "0.24" }
 lazy_static = { version = "1", optional = true }
-opentelemetry = { version = "0.21", optional = true }
+opentelemetry = { version = "0.22", optional = true }
 prometheus = { version = "0.13", optional = true }
 quick-error = "2"
 serde = { version = "1.0", features = ["derive"] }
