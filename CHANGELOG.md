@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.7.0 - 2024-06-25
+
+### Changed
+
+- `opentelemetry` updated to version `0.23` from `0.22`.
+- `http` updated to version `1.0` from `0.2`.
+- `hyper` updated to version `1.0` from `0.14`.
+- `hyper-rustls` updated to version `0.27` from `0.24`.
+
 ## 0.6.0 - 2024-04-01
 
 ### Changed
