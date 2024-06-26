@@ -171,7 +171,21 @@ pub struct Config {
 }
 
 fn default_builder() -> Builder {
+    // https://github.com/hyperium/hyper/issues/2312
     Builder::new(hyper_util::rt::TokioExecutor::new())
+        .pool_idle_timeout(std::time::Duration::from_millis(0))
+        .pool_max_idle_per_host(0)
+        .to_owned()
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            address: String::default(),
+            token: None,
+            hyper_builder: default_builder(),
+        }
+    }
 }
 
 impl Config {
