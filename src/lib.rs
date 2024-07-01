@@ -201,7 +201,7 @@ impl Config {
         Config {
             address: addr,
             token: Some(token),
-            hyper_builder: Builder::new(hyper_util::rt::TokioExecutor::new()),
+            hyper_builder: default_builder(),
         }
     }
 }
