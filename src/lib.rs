@@ -983,6 +983,19 @@ mod tests {
             .iter()
             .all(|item| addresses.contains(item)));
 
+        let tags: Vec<String> = response
+            .iter()
+            .map(|sn| sn.service.tags.clone().into_iter())
+            .flatten()
+            .collect();
+        let expected_tags = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
+        assert_eq!(expected_tags.len(), 3);
+        assert!(expected_tags.iter().all(|tag| tags.contains(tag)));
+
         let _: Vec<_> = response
             .iter()
             .map(|sn| assert_eq!("dc1", sn.node.datacenter))
@@ -1116,6 +1129,7 @@ mod tests {
             service: "node".to_string(),
             address: "2.2.2.2".to_string(),
             port: 32,
+            tags: vec!["foo".to_string(), "bar=baz".to_string()],
         };
 
         let empty_service = Service {
@@ -1123,6 +1137,7 @@ mod tests {
             service: "".to_string(),
             address: "".to_string(),
             port: 32,
+            tags: vec![],
         };
 
         let sn = ServiceNode {

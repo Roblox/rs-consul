@@ -454,6 +454,8 @@ pub struct Service {
     pub address: String,
     /// The port of the instance.
     pub port: u16,
+    /// Tags assigned to the service instance.
+    pub tags: Vec<String>,
 }
 
 pub(crate) fn serialize_duration_as_string<S>(
