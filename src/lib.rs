@@ -267,29 +267,35 @@ impl Consul {
     /// - request - the [ReadKeyRequest](consul::types::ReadKeyRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn read_key(&self, request: ReadKeyRequest<'_>) -> Result<Vec<ReadKeyResponse>> {
+    pub async fn read_key(
+        &self,
+        request: ReadKeyRequest<'_>,
+    ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
         let req = self.build_read_key_req(request);
-        let (mut response_body, _index) = self
+        let (mut response_body, index) = self
             .execute_request(req, hyper::Body::empty(), None, READ_KEY_METHOD_NAME)
             .await?;
         let bytes = response_body.copy_to_bytes(response_body.remaining());
-        serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
-            .map_err(ConsulError::ResponseDeserializationFailed)?
-            .into_iter()
-            .map(|mut r| {
-                r.value = match r.value {
-                    Some(val) => Some(
-                        std::str::from_utf8(
-                            &base64::engine::general_purpose::STANDARD.decode(val)?,
-                        )?
-                        .to_string(),
-                    ),
-                    None => None,
-                };
+        Ok(ResponseMeta {
+            response: serde_json::from_slice::<Vec<ReadKeyResponse>>(&bytes)
+                .map_err(ConsulError::ResponseDeserializationFailed)?
+                .into_iter()
+                .map(|mut r| {
+                    r.value = match r.value {
+                        Some(val) => Some(
+                            std::str::from_utf8(
+                                &base64::engine::general_purpose::STANDARD.decode(val)?,
+                            )?
+                            .to_string(),
+                        ),
+                        None => None,
+                    };
 
-                Ok(r)
-            })
-            .collect()
+                    Ok(r)
+                })
+                .collect::<Result<Vec<_>>>()?,
+            index,
+        })
     }
 
     /// Creates or updates a key in Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#create-update-key) for more information.
@@ -461,7 +467,7 @@ impl Consul {
     pub async fn watch_lock<'a>(
         &self,
         request: LockWatchRequest<'_>,
-    ) -> Result<Vec<ReadKeyResponse>> {
+    ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
         let req = ReadKeyRequest {
             key: request.key,
             namespace: request.namespace,
@@ -1293,7 +1299,7 @@ mod tests {
             .await
     }
 
-    async fn read_key(consul: &Consul, key: &str) -> Result<Vec<ReadKeyResponse>> {
+    async fn read_key(consul: &Consul, key: &str) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
         let req = ReadKeyRequest {
             key,
             ..Default::default()
@@ -1322,14 +1328,20 @@ mod tests {
 
     async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
         let res = read_key(consul, key).await.expect("failed to read key");
-        let r = res.into_iter().next().unwrap();
-        (r.value, r.modify_index)
+        let r = res.response.into_iter().next().unwrap();
+        (r.value, res.index as i64)
     }
 
-    fn verify_single_value_matches(res: Result<Vec<ReadKeyResponse>>, value: &str) {
+    fn verify_single_value_matches(res: Result<ResponseMeta<Vec<ReadKeyResponse>>>, value: &str) {
         assert!(res.is_ok());
         assert_eq!(
-            res.unwrap().into_iter().next().unwrap().value.unwrap(),
+            res.unwrap()
+                .response
+                .into_iter()
+                .next()
+                .unwrap()
+                .value
+                .unwrap(),
             value
         )
     }
