@@ -245,21 +245,62 @@ impl Drop for Lock<'_> {
     }
 }
 
+/// Type alias for a Hyper client using a hyper_rusttls HttpsConnector
+pub type HttpsClient =
+    Client<hyper_rustls::HttpsConnector<HttpConnector>, BoxBody<Bytes, Infallible>>;
+
 #[derive(Debug)]
 /// This struct defines the consul client and allows access to the consul api via method syntax.
 pub struct Consul {
-    https_client: Client<hyper_rustls::HttpsConnector<HttpConnector>, BoxBody<Bytes, Infallible>>,
+    https_client: HttpsClient,
     config: Config,
     #[cfg(feature = "trace")]
     tracer: BoxedTracer,
 }
 
-fn https_connector() -> Result<hyper_rustls::HttpsConnector<HttpConnector>> {
-    Ok(hyper_rustls::HttpsConnectorBuilder::new()
+fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
+    hyper_rustls::HttpsConnectorBuilder::new()
         .with_webpki_roots()
         .https_or_http()
         .enable_http1()
-        .build())
+        .build()
+}
+
+/// This struct defines a builder for the consul client
+/// This allows a Consul client to be built using a custom HTTPS client
+pub struct ConsulBuilder {
+    config: Config,
+    https_client: Option<HttpsClient>,
+}
+
+impl ConsulBuilder {
+    /// Creates a new instance of [`ConsulBuilder`](consul::ConsulBuilder)
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
+            https_client: None,
+        }
+    }
+
+    /// Sets the HTTPS client to be used when building an instance of [`Consul`](consul::Consul).
+    /// #Arguments:
+    /// - [HttpsClient](consul::HttpsClient)
+    pub fn with_https_client(mut self, https_client: HttpsClient) -> Self {
+        self.https_client = Some(https_client);
+        self
+    }
+
+    /// Creates a new instance of [`Consul`](consul::Consul) using the supplied HTTPS client (if any).
+    pub fn build(self) -> Consul {
+        let https_client = self.https_client.unwrap_or_else(|| {
+            let https = https_connector();
+            self.config
+                .hyper_builder
+                .build::<_, BoxBody<Bytes, Infallible>>(https)
+        });
+
+        Consul::new_with_client(self.config, https_client)
+    }
 }
 
 impl Consul {
@@ -267,17 +308,22 @@ impl Consul {
     /// This is the entry point for this crate.
     /// #Arguments:
     /// - [Config](consul::Config)
-    pub fn new(config: Config) -> Result<Self> {
-        let https = https_connector()?;
-        let https_client = config
-            .hyper_builder
-            .build::<_, BoxBody<Bytes, Infallible>>(https);
-        Ok(Consul {
+    pub fn new(config: Config) -> Self {
+        ConsulBuilder::new(config).build()
+    }
+
+    /// Creates a new instance of [`Consul`](consul::Consul) using the supplied HTTPS client.
+    /// This is the entry point for this crate.
+    /// #Arguments:
+    /// - [Config](consul::Config)
+    /// - [HttpsClient](consul::HttpsClient)
+    pub fn new_with_client(config: Config, https_client: HttpsClient) -> Self {
+        Consul {
             https_client,
             config,
             #[cfg(feature = "trace")]
             tracer: global::tracer("consul"),
-        })
+        }
     }
 
     /// Reads a key from Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
@@ -1326,7 +1372,7 @@ mod tests {
 
     fn get_client() -> Consul {
         let conf: Config = Config::from_env();
-        Consul::new(conf).unwrap()
+        Consul::new(conf)
     }
 
     async fn create_or_update_key_value(
