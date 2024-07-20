@@ -34,3 +34,6 @@ slog-scope = "4"
 smart-default = "0.7"
 tokio = { version = "1", features = ["full"] }
 ureq = { version = "2", features = ["json"] }
+
+[dev-dependencies]
+rustls = { version = "0.23", features = ["ring"] }
