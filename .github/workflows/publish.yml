@@ -13,7 +13,7 @@ jobs:
         env:
           # We pass the config as a JSON here to simulate one service with 3 nodes.
           # TODO: Ideally, we should use the same setup in local environment (`testdata/config.hcl`) in GHA test.
-          CONSUL_LOCAL_CONFIG: '{"acl": [{"default_policy": "allow", "enable_token_persistence": true, "enabled": true}], "services": [ {"address": "1.1.1.1", "checks": [], "id": "test-service-1", "name": "test-service", "port": 20001}, {"address": "2.2.2.2", "checks": [], "id": "test-service-2", "name": "test-service", "port": 20002}, {"address": "3.3.3.3", "checks": [], "id": "test-service-3", "name": "test-service", "port": 20003} ]}'
+          CONSUL_LOCAL_CONFIG: '{"acl": [{"default_policy": "allow", "enable_token_persistence": true, "enabled": true}], "services": [ {"address": "1.1.1.1", "checks": [], "id": "test-service-1", "name": "test-service", "port": 20001, "tags": ["first"]}, {"address": "2.2.2.2", "checks": [], "id": "test-service-2", "name": "test-service", "port": 20002, "tags": ["second"]}, {"address": "3.3.3.3", "checks": [], "id": "test-service-3", "name": "test-service", "port": 20003, "tags": ["third"]} ]}'
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
 
