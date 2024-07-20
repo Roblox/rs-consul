@@ -961,8 +961,15 @@ mod tests {
         let res = create_or_update_key_value(&consul, key, string_value).await;
         assert_expected_result_with_index(res);
 
-        let res = read_key(&consul, key).await;
-        verify_single_value_matches(res, string_value);
+        let res = read_key(&consul, key).await.unwrap();
+        let index = res.index;
+        verify_single_value_matches(Ok(res), string_value);
+
+        let res = read_key(&consul, key).await.unwrap();
+        assert_eq!(res.index, index);
+        create_or_update_key_value(&consul, key, "This is a new test").await.unwrap();
+        let res = read_key(&consul, key).await.unwrap();
+        assert!(res.index > index);
     }
 
     #[tokio::test(flavor = "multi_thread")]
