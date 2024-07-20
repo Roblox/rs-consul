@@ -24,7 +24,7 @@ jobs:
   test:
     strategy:
       matrix:
-        features: ["", "--no-default-features --features rustls-native"]
+        features: [""]
     runs-on: "ubuntu-latest"
     container: rust:1.79
     services:

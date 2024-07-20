@@ -39,7 +39,6 @@ use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::{body::Buf, Method};
 use hyper_util::client::legacy::{connect::HttpConnector, Builder, Client};
-#[cfg(any(feature = "rustls-native", feature = "rustls-webpki"))]
 #[cfg(feature = "metrics")]
 use lazy_static::lazy_static;
 use quick_error::quick_error;
@@ -256,16 +255,8 @@ pub struct Consul {
 }
 
 fn https_connector() -> Result<hyper_rustls::HttpsConnector<HttpConnector>> {
-    #[cfg(feature = "rustls-webpki")]
-    return Ok(hyper_rustls::HttpsConnectorBuilder::new()
-        .with_webpki_roots()
-        .https_or_http()
-        .enable_http1()
-        .build());
-    #[allow(unreachable_code)]
-    // Clippy doesn't realize if the feature is disabled, this code would execute.
     Ok(hyper_rustls::HttpsConnectorBuilder::new()
-        .with_native_roots()?
+        .with_webpki_roots()
         .https_or_http()
         .enable_http1()
         .build())
@@ -949,7 +940,6 @@ fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duratio
 mod tests {
     use std::time::Duration;
 
-    use rustls::crypto::ring::default_provider;
     use tokio::time::sleep;
 
     use super::*;
@@ -1335,9 +1325,6 @@ mod tests {
     }
 
     fn get_client() -> Consul {
-        default_provider()
-            .install_default()
-            .expect("Failed to install rustls crypto provider");
         let conf: Config = Config::from_env();
         Consul::new(conf).unwrap()
     }

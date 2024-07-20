@@ -10,10 +10,8 @@ license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["rustls-webpki"]
+default = []
 metrics = ["prometheus", "lazy_static"]
-rustls-native = ["hyper-rustls/rustls-native-certs"]
-rustls-webpki = ["hyper-rustls/webpki-roots"]
 trace = ["dep:opentelemetry"]
 
 # keep this list sorted!
@@ -22,7 +20,7 @@ base64 = "0.22"
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }
-hyper-rustls = { version = "0.27", features = ["ring"] }
+hyper-rustls = { version = "0.27", features = ["webpki-roots"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio", "http2"] }
 lazy_static = { version = "1", optional = true }
 opentelemetry = { version = "0.24", optional = true }
@@ -34,6 +32,3 @@ slog-scope = "4"
 smart-default = "0.7"
 tokio = { version = "1", features = ["full"] }
 ureq = { version = "2", features = ["json"] }
-
-[dev-dependencies]
-rustls = { version = "0.23", features = ["ring"] }
