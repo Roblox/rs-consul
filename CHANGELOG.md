@@ -16,7 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `hyper-rustls` updated to version `0.27` from `0.24`.
 - `get_service_nodes` now supports tags thanks to @gautamg795
 - `read_key` now also returns the index thanks to @badalex
-- Removed `rustls-native-roots` feature and now defaults to `rustls-webpki-roots`. This addresses the bug that features were not additive.
+- Allow configuring `Consul` with a custom http client thanks to @LeonHartley
+- Removed `rustls-native-roots` feature and now defaults to `rustls-webpki-roots` (which has been removed). This addresses the bug that features were not additive.
 
 ## 0.6.0 - 2024-04-01
 
