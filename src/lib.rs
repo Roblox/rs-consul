@@ -967,9 +967,13 @@ mod tests {
 
         let res = read_key(&consul, key).await.unwrap();
         assert_eq!(res.index, index);
-        create_or_update_key_value(&consul, key, string_value).await.unwrap();
+        create_or_update_key_value(&consul, key, string_value)
+            .await
+            .unwrap();
         assert_eq!(res.index, index);
-        create_or_update_key_value(&consul, key, "This is a new test").await.unwrap();
+        create_or_update_key_value(&consul, key, "This is a new test")
+            .await
+            .unwrap();
         let res = read_key(&consul, key).await.unwrap();
         assert!(res.index > index);
     }
