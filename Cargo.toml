@@ -20,7 +20,7 @@ base64 = "0.22"
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }
-hyper-rustls = { version = "0.27", features = ["webpki-roots"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-roots", "ring", "http1"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio", "http2"] }
 lazy_static = { version = "1", optional = true }
 opentelemetry = { version = "0.24", optional = true }
