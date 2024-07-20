@@ -1334,7 +1334,9 @@ mod tests {
     }
 
     fn get_client() -> Consul {
-        rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("Failed to install rustls crypto provider");
         let conf: Config = Config::from_env();
         Consul::new(conf).unwrap()
     }
