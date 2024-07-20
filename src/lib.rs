@@ -949,6 +949,7 @@ fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duratio
 mod tests {
     use std::time::Duration;
 
+    use rustls::crypto::ring::default_provider;
     use tokio::time::sleep;
 
     use super::*;
@@ -1334,7 +1335,7 @@ mod tests {
     }
 
     fn get_client() -> Consul {
-        rustls::crypto::ring::default_provider()
+        default_provider()
             .install_default()
             .expect("Failed to install rustls crypto provider");
         let conf: Config = Config::from_env();
