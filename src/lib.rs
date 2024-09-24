@@ -689,6 +689,51 @@ impl Consul {
         Ok(addresses_and_ports)
     }
 
+    /// Generate Snapshot. See the [consul docs](https://www.consul.io/api-docs/snapshot#generate-snapshot) for more information.
+    /// # Arguments:
+    /// - dc - the datacenter
+    /// - stale - allows any follower to reply
+    /// # Returns:
+    /// The Raft snapshot
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn generate_snapshot(
+      &self,
+      dc: &str,
+      stale: bool
+  ) -> Result<Vec<u8>> {
+      let url = self.build_snapshot_url(dc, stale);
+      let req = hyper::Request::builder()
+        .method(Method::GET)
+        .uri(url)
+        .header("Accept", "application/x-gzip");
+      let (body, _) = self.execute_request(req, Body::empty(), None).await?;
+      Ok(buf_to_vec(body))
+  }
+
+    /// Restore Snapshot. See the [consul docs](https://www.consul.io/api-docs/snapshot#restore-snapshot) for more information.
+    /// # Arguments:
+    /// - dc - the datacenter
+    /// - snapshot - the snapshot to restore
+    /// # Returns:
+    /// No value, indicating success
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn restore_snapshot(
+      &self,
+      dc: &str,
+      snapshot: Vec<u8>
+  ) -> Result<()> {
+      let url = self.build_snapshot_url(dc, false);
+      let req = hyper::Request::builder()
+        .method(Method::PUT)
+        .uri(url)
+        .header("Content-Type", "application/x-gzip");
+
+      let (_, _) = self.execute_request(req, Body::from(snapshot), None).await?;
+      Ok(())
+  }
+
     /// Parse the address and port from a Consul [`ServiceNode`](`ServiceNode`) response.
     /// This chooses the Service address:port if the address is present. If not, it chooses the Node address with the service port.
     /// Context: To get a list of healthy instances for a service to return their IP/ports.
@@ -902,6 +947,15 @@ impl Consul {
 
         add_namespace_and_datacenter(url, request.namespace, request.datacenter)
     }
+
+    fn build_snapshot_url(&self, dc: &str, stale: bool) -> String {
+      let mut url = String::new();
+      url.push_str(&format!("{}/v1/snapshot", self.config.address,));
+      if stale {
+        url.push_str(&format!("?stale={}", stale,));
+      }
+      add_namespace_and_datacenter(url, "", dc)
+    }
 }
 
 fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut separator: char) {
@@ -955,6 +1009,13 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
     url
 }
 
+fn buf_to_vec(buf: Box<dyn hyper::body::Buf>) -> Vec<u8> {
+  let mut buf = buf;
+  let mut vector = Vec::with_capacity(buf.remaining());
+  buf.copy_to_slice(vector.as_mut_slice());
+  vector
+}
+
 fn record_request_metric_if_enabled(_method: &Method, _function: &str) {
     #[cfg(feature = "metrics")]
     {
@@ -980,7 +1041,6 @@ fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duratio
             .with_label_values(&[_method.as_str(), _function])
             .observe(_duration);
     }
-}
 
 #[cfg(test)]
 mod tests {
