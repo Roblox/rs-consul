@@ -1,5 +1,7 @@
-use http::StatusCode;
+#[cfg(feature = "metrics")]
 use std::time::Duration;
+#[cfg(feature = "metrics")]
+use http::StatusCode;
 
 /// A struct to hold information about a calls to consul for metrics.
 #[cfg(feature = "metrics")]

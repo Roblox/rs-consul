@@ -28,7 +28,10 @@ SOFTWARE.
 #![deny(missing_docs)]
 
 use http_body_util::BodyExt;
+
+#[cfg(feature = "metrics")]
 use metrics::MetricInfoWrapper;
+
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::time::Duration;
@@ -770,7 +773,7 @@ impl Consul {
         req: http::request::Builder,
         body: BoxBody<Bytes, Infallible>,
         duration: Option<std::time::Duration>,
-        function: Function,
+        _function: Function,
     ) -> Result<(Box<dyn Buf>, u64)> {
         let req = req
             .header(
@@ -782,13 +785,14 @@ impl Consul {
         #[cfg(feature = "trace")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
+        #[cfg(feature = "metrics")]
         let method = req.method().clone();
 
         let future = self.https_client.request(req);
 
         #[cfg(feature = "metrics")]
         let mut metrics_info_wrapper =
-            MetricInfoWrapper::new(method.into(), function, None, self.metrics_tx.clone());
+            MetricInfoWrapper::new(method.into(), _function, None, self.metrics_tx.clone());
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
                 Ok(resp) => resp.map_err(ConsulError::ResponseError),
