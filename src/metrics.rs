@@ -1,5 +1,6 @@
 #[cfg(feature = "metrics")]
 use http::StatusCode;
+
 #[cfg(feature = "metrics")]
 use std::time::Duration;
 
