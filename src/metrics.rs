@@ -104,6 +104,7 @@ pub enum HttpMethod {
 }
 
 impl HttpMethod {
+    #[cfg(feature = "metrics")]
     fn as_str(&self) -> &'static str {
         match self {
             HttpMethod::Options => "options",
@@ -120,6 +121,7 @@ impl HttpMethod {
     }
 }
 
+#[cfg(feature = "metrics")]
 impl From<http::Method> for HttpMethod {
     fn from(method: http::Method) -> Self {
         match method {
@@ -160,6 +162,7 @@ pub enum Function {
 
 impl Function {
     /// Get the function as a string.
+    #[cfg(feature = "metrics")]
     pub fn as_str(&self) -> &'static str {
         match self {
             Function::ReadKey => "read_key",
