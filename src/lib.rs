@@ -400,8 +400,12 @@ impl Consul {
 
         let url = self.build_create_or_update_url(request);
         #[cfg(feature = "metrics")]
-        let mut metrics_info_wrapper =
-            MetricInfoWrapper::new(HttpMethod::Put, Function::CreateOrUpdateKey, None, self.metrics_tx.clone());
+        let mut metrics_info_wrapper = MetricInfoWrapper::new(
+            HttpMethod::Put,
+            Function::CreateOrUpdateKey,
+            None,
+            self.metrics_tx.clone(),
+        );
         let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
@@ -417,8 +421,11 @@ impl Consul {
                     metrics_info_wrapper.set_status(code);
                     drop(metrics_info_wrapper.clone());
                 }
-                ConsulError::UnexpectedResponseCode(code, response.into_string().unwrap_or_default())
-            },
+                ConsulError::UnexpectedResponseCode(
+                    code,
+                    response.into_string().unwrap_or_default(),
+                )
+            }
             ureq::Error::Transport(t) => {
                 ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string())
             }
