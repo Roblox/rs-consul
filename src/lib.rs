@@ -27,6 +27,7 @@ SOFTWARE.
 //! This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)
 #![deny(missing_docs)]
 
+use http::StatusCode;
 use http_body_util::BodyExt;
 
 #[cfg(feature = "metrics")]
@@ -398,6 +399,9 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
+        #[cfg(feature = "metrics")]
+        let mut metrics_info_wrapper =
+            MetricInfoWrapper::new(HttpMethod::Put, Function::CreateOrUpdateKey, None, self.metrics_tx.clone());
         let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
@@ -406,10 +410,15 @@ impl Consul {
             .send_bytes(&value);
 
         let response = result.map_err(|e| match e {
-            ureq::Error::Status(code, response) => ConsulError::UnexpectedResponseCode(
-                hyper::StatusCode::from_u16(code).unwrap_or_default(),
-                response.into_string().unwrap_or_default(),
-            ),
+            ureq::Error::Status(code, response) => {
+                let code = hyper::StatusCode::from_u16(code).unwrap_or_default();
+                #[cfg(feature = "metrics")]
+                {
+                    metrics_info_wrapper.set_status(code);
+                    drop(metrics_info_wrapper.clone());
+                }
+                ConsulError::UnexpectedResponseCode(code, response.into_string().unwrap_or_default())
+            },
             ureq::Error::Transport(t) => {
                 ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string())
             }
@@ -418,6 +427,11 @@ impl Consul {
         if status == 200 {
             let val = response.into_string()?;
             let response: bool = std::str::FromStr::from_str(val.trim())?;
+            #[cfg(feature = "metrics")]
+            {
+                metrics_info_wrapper.set_status(StatusCode::OK);
+                drop(metrics_info_wrapper.clone());
+            }
             return Ok(response);
         }
 
