@@ -808,17 +808,20 @@ impl Consul {
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
         #[cfg(feature = "metrics")]
-        let method = req.method().clone();
-
-        let future = self.https_client.request(req);
-
-        #[cfg(feature = "metrics")]
         let mut metrics_info_wrapper =
-            MetricInfoWrapper::new(method.into(), _function, None, self.metrics_tx.clone());
+            MetricInfoWrapper::new(req.method().clone().into(), _function, None, self.metrics_tx.clone());
+        let future = self.https_client.request(req);
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
                 Ok(resp) => resp.map_err(ConsulError::ResponseError),
-                Err(_) => Err(ConsulError::TimeoutExceeded(dur)),
+                Err(_) => {
+                    #[cfg(feature = "metrics")]
+                    {
+                        metrics_info_wrapper.set_status(StatusCode::REQUEST_TIMEOUT);
+                        drop(metrics_info_wrapper.clone());
+                    }
+                    Err(ConsulError::TimeoutExceeded(dur))
+                },
             }
         } else {
             future.await.map_err(ConsulError::ResponseError)
