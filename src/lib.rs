@@ -66,7 +66,7 @@ pub use types::*;
 #[cfg(feature = "trace")]
 mod hyper_wrapper;
 /// Types exposed for metrics on the consuming application without taking a dependency on a metrics library or a specific implementation.
-pub mod metrics;
+mod metrics;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
 
