@@ -26,8 +26,6 @@ SOFTWARE.
 //!
 //! This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)
 #![deny(missing_docs)]
-
-use http::StatusCode;
 use http_body_util::BodyExt;
 
 #[cfg(feature = "metrics")]
@@ -48,6 +46,9 @@ use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
+
+#[cfg(feature = "metrics")]
+use http::StatusCode;
 
 #[cfg(feature = "trace")]
 use opentelemetry::global;
