@@ -43,7 +43,7 @@ impl MetricInfo {
 #[derive(Debug, Clone)]
 pub(crate) struct MetricInfoWrapper {
     metrics: MetricInfo,
-    sender: Option<std::sync::mpsc::Sender<MetricInfo>>,
+    sender: Option<tokio::sync::mpsc::UnboundedSender<MetricInfo>>,
     start: std::time::Instant,
 }
 
@@ -53,7 +53,7 @@ impl MetricInfoWrapper {
         method: HttpMethod,
         function: Function,
         status: Option<StatusCode>,
-        sender: std::sync::mpsc::Sender<MetricInfo>,
+        sender: tokio::sync::mpsc::UnboundedSender<MetricInfo>,
     ) -> Self {
         Self {
             metrics: MetricInfo::new(method, function, status),
