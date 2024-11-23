@@ -228,9 +228,9 @@ pub struct Consul {
     #[cfg(feature = "trace")]
     tracer: BoxedTracer,
     #[cfg(feature = "metrics")]
-    metrics_tx: std::sync::mpsc::Sender<MetricInfo>,
+    metrics_tx: tokio::sync::mpsc::UnboundedSender<MetricInfo>,
     #[cfg(feature = "metrics")]
-    metrics_rx: Option<std::sync::mpsc::Receiver<MetricInfo>>,
+    metrics_rx: Option<tokio::sync::mpsc::UnboundedReceiver<MetricInfo>>,
 }
 
 fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
@@ -294,7 +294,7 @@ impl Consul {
     /// - [HttpsClient](consul::HttpsClient)
     pub fn new_with_client(config: Config, https_client: HttpsClient) -> Self {
         #[cfg(feature = "metrics")]
-        let (tx, rx) = std::sync::mpsc::channel::<MetricInfo>();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<MetricInfo>();
         Consul {
             https_client,
             config,
@@ -309,7 +309,7 @@ impl Consul {
 
     #[cfg(feature = "metrics")]
     /// Returns the metrics receiver for the consul client.
-    pub fn metrics_receiver(&mut self) -> Option<std::sync::mpsc::Receiver<MetricInfo>> {
+    pub fn metrics_receiver(&mut self) -> Option<tokio::sync::mpsc::UnboundedReceiver<MetricInfo>> {
         self.metrics_rx.take()
     }
 

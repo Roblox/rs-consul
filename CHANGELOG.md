@@ -6,12 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
-## 0.8.0 - 2024-11-20
+## 0.8.1 - 2024-11-20
 
 ### Changed
 
 - `opentelemetry` upgraded to version `0.27` from `0.24`.
 - Removed `prometheus` dependency in the `metrics` feature, replacing it with a `metrics_receiver` in a metrics library agnostic fashion.
+
+## 0.8.0 - 2024-11-20
+
+- YANKED because `Consul` was no longer `Sync`.
 
 ## 0.7.0 - 2024-06-25
 
