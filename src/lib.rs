@@ -26,11 +26,14 @@ SOFTWARE.
 //!
 //! This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)
 #![deny(missing_docs)]
-
 use http_body_util::BodyExt;
+
+#[cfg(feature = "metrics")]
+use metrics::MetricInfoWrapper;
+
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{env, str::Utf8Error};
 
 use base64::Engine;
@@ -39,12 +42,13 @@ use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::{body::Buf, Method};
 use hyper_util::client::legacy::{connect::HttpConnector, Builder, Client};
-#[cfg(feature = "metrics")]
-use lazy_static::lazy_static;
 use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
+
+#[cfg(feature = "metrics")]
+use http::StatusCode;
 
 #[cfg(feature = "trace")]
 use opentelemetry::global;
@@ -55,10 +59,15 @@ use opentelemetry::trace::Span;
 #[cfg(feature = "trace")]
 use opentelemetry::trace::Status;
 
+#[cfg(feature = "metrics")]
+pub use metrics::MetricInfo;
+pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
 #[cfg(feature = "trace")]
 mod hyper_wrapper;
+/// Types exposed for metrics on the consuming application without taking a dependency on a metrics library or a specific implementation.
+mod metrics;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
 
@@ -114,44 +123,6 @@ quick_error! {
         }
     }
 }
-
-#[cfg(feature = "metrics")]
-lazy_static! {
-    static ref CONSUL_REQUESTS_TOTAL: prometheus::CounterVec = prometheus::register_counter_vec!(
-        prometheus::opts!("consul_requests_total", "Total requests made to consul"),
-        &["method", "function"]
-    )
-    .unwrap();
-    static ref CONSUL_REQUESTS_FAILED_TOTAL: prometheus::CounterVec =
-        prometheus::register_counter_vec!(
-            prometheus::opts!(
-                "consul_requests_failed_total",
-                "Total requests made to consul that failed"
-            ),
-            &["method", "function"]
-        )
-        .unwrap();
-    static ref CONSUL_REQUESTS_DURATION_MS: prometheus::HistogramVec =
-        prometheus::register_histogram_vec!(
-            prometheus::histogram_opts!(
-                "consul_requests_duration_milliseconds",
-                "Time it takes for a consul request to complete"
-            ),
-            &["method", "function"]
-        )
-        .unwrap();
-}
-
-const READ_KEY_METHOD_NAME: &str = "read_key";
-const CREATE_OR_UPDATE_KEY_METHOD_NAME: &str = "create_or_update_key";
-const CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME: &str = "create_or_update_key_sync";
-const DELETE_KEY_METHOD_NAME: &str = "delete_key";
-const GET_LOCK_METHOD_NAME: &str = "get_lock";
-const REGISTER_ENTITY_METHOD_NAME: &str = "register_entity";
-const DEREGISTER_ENTITY_METHOD_NAME: &str = "deregister_entity";
-const GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME: &str = "get_all_registered_service_names";
-const GET_SERVICE_NODES_METHOD_NAME: &str = "get_service_nodes";
-const GET_SESSION_METHOD_NAME: &str = "get_session";
 
 pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
 
@@ -256,6 +227,10 @@ pub struct Consul {
     config: Config,
     #[cfg(feature = "trace")]
     tracer: BoxedTracer,
+    #[cfg(feature = "metrics")]
+    metrics_tx: std::sync::mpsc::Sender<MetricInfo>,
+    #[cfg(feature = "metrics")]
+    metrics_rx: Option<std::sync::mpsc::Receiver<MetricInfo>>,
 }
 
 fn https_connector() -> hyper_rustls::HttpsConnector<HttpConnector> {
@@ -318,12 +293,24 @@ impl Consul {
     /// - [Config](consul::Config)
     /// - [HttpsClient](consul::HttpsClient)
     pub fn new_with_client(config: Config, https_client: HttpsClient) -> Self {
+        #[cfg(feature = "metrics")]
+        let (tx, rx) = std::sync::mpsc::channel::<MetricInfo>();
         Consul {
             https_client,
             config,
             #[cfg(feature = "trace")]
             tracer: global::tracer("consul"),
+            #[cfg(feature = "metrics")]
+            metrics_tx: tx,
+            #[cfg(feature = "metrics")]
+            metrics_rx: Some(rx),
         }
+    }
+
+    #[cfg(feature = "metrics")]
+    /// Returns the metrics receiver for the consul client.
+    pub fn metrics_receiver(&mut self) -> Option<std::sync::mpsc::Receiver<MetricInfo>> {
+        self.metrics_rx.take()
     }
 
     /// Reads a key from Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#read-key) for more information.
@@ -341,7 +328,7 @@ impl Consul {
                 req,
                 BoxBody::new(http_body_util::Empty::<Bytes>::new()),
                 None,
-                READ_KEY_METHOD_NAME,
+                Function::ReadKey,
             )
             .await?;
         Ok(ResponseMeta {
@@ -386,7 +373,7 @@ impl Consul {
                 req,
                 BoxBody::new(Full::<Bytes>::new(Bytes::from(value))),
                 None,
-                CREATE_OR_UPDATE_KEY_METHOD_NAME,
+                Function::CreateOrUpdateKey,
             )
             .await?;
         Ok((
@@ -413,9 +400,13 @@ impl Consul {
         // TODO: Emit OpenTelemetry span for this request
 
         let url = self.build_create_or_update_url(request);
-
-        record_request_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
-        let step_start_instant = Instant::now();
+        #[cfg(feature = "metrics")]
+        let mut metrics_info_wrapper = MetricInfoWrapper::new(
+            HttpMethod::Put,
+            Function::CreateOrUpdateKey,
+            None,
+            self.metrics_tx.clone(),
+        );
         let result = ureq::put(&url)
             .set(
                 "X-Consul-Token",
@@ -423,33 +414,36 @@ impl Consul {
             )
             .send_bytes(&value);
 
-        record_duration_metric_if_enabled(
-            &Method::PUT,
-            CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME,
-            step_start_instant.elapsed().as_millis() as f64,
-        );
-        let response = result.map_err(|e| {
-            record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
-            match e {
-                ureq::Error::Status(code, response) => ConsulError::UnexpectedResponseCode(
-                    hyper::StatusCode::from_u16(code).unwrap_or_default(),
+        let response = result.map_err(|e| match e {
+            ureq::Error::Status(code, response) => {
+                let code = hyper::StatusCode::from_u16(code).unwrap_or_default();
+                #[cfg(feature = "metrics")]
+                {
+                    metrics_info_wrapper.set_status(code);
+                    drop(metrics_info_wrapper.clone());
+                }
+                ConsulError::UnexpectedResponseCode(
+                    code,
                     response.into_string().unwrap_or_default(),
-                ),
-                ureq::Error::Transport(t) => ConsulError::TransportError(
-                    t.kind(),
-                    t.message().unwrap_or_default().to_string(),
-                ),
+                )
+            }
+            ureq::Error::Transport(t) => {
+                ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string())
             }
         })?;
         let status = response.status();
         if status == 200 {
             let val = response.into_string()?;
             let response: bool = std::str::FromStr::from_str(val.trim())?;
+            #[cfg(feature = "metrics")]
+            {
+                metrics_info_wrapper.set_status(StatusCode::OK);
+                drop(metrics_info_wrapper.clone());
+            }
             return Ok(response);
         }
 
         let body = response.into_string()?;
-        record_failure_metric_if_enabled(&Method::PUT, CREATE_OR_UPDATE_KEY_SYNC_METHOD_NAME);
         Err(ConsulError::SyncUnexpectedResponseCode(status, body))
     }
 
@@ -476,7 +470,7 @@ impl Consul {
                 req,
                 BoxBody::new(Empty::<Bytes>::new()),
                 None,
-                DELETE_KEY_METHOD_NAME,
+                Function::DeleteKey,
             )
             .await?;
         serde_json::from_reader(response_body.reader())
@@ -525,7 +519,7 @@ impl Consul {
                     lock_index_req,
                     BoxBody::new(http_body_util::Empty::<Bytes>::new()),
                     None,
-                    GET_LOCK_METHOD_NAME,
+                    Function::ReadKey,
                 )
                 .await?;
             Err(ConsulError::LockAcquisitionFailure(index))
@@ -567,7 +561,7 @@ impl Consul {
             request,
             BoxBody::new(Full::<Bytes>::new(Bytes::from(payload.into_bytes()))),
             Some(Duration::from_secs(5)),
-            REGISTER_ENTITY_METHOD_NAME,
+            Function::RegisterEntity,
         )
         .await?;
         Ok(())
@@ -587,7 +581,7 @@ impl Consul {
             request,
             BoxBody::new(Full::<Bytes>::new(Bytes::from(payload.into_bytes()))),
             Some(Duration::from_secs(5)),
-            DEREGISTER_ENTITY_METHOD_NAME,
+            Function::DeregisterEntity,
         )
         .await?;
         Ok(())
@@ -615,7 +609,7 @@ impl Consul {
                 request,
                 BoxBody::new(Empty::<Bytes>::new()),
                 query_opts.timeout,
-                GET_ALL_REGISTERED_SERVICE_NAMES_METHOD_NAME,
+                Function::GetAllRegisteredServices,
             )
             .await?;
         let service_tags_by_name =
@@ -647,7 +641,7 @@ impl Consul {
                 req,
                 BoxBody::new(Empty::<Bytes>::new()),
                 query_opts.timeout,
-                GET_SERVICE_NODES_METHOD_NAME,
+                Function::GetServiceNodes,
             )
             .await?;
         let response =
@@ -767,7 +761,7 @@ impl Consul {
                     create_session_json.into_bytes(),
                 ))),
                 None,
-                GET_SESSION_METHOD_NAME,
+                Function::GetSession,
             )
             .await?;
         serde_json::from_reader(response_body.reader())
@@ -801,7 +795,7 @@ impl Consul {
         req: http::request::Builder,
         body: BoxBody<Bytes, Infallible>,
         duration: Option<std::time::Duration>,
-        request_name: &str,
+        _function: Function,
     ) -> Result<(Box<dyn Buf>, u64)> {
         let req = req
             .header(
@@ -813,37 +807,45 @@ impl Consul {
         #[cfg(feature = "trace")]
         let mut span = crate::hyper_wrapper::span_for_request(&self.tracer, &req);
 
-        let method = req.method().clone();
-        record_request_metric_if_enabled(&method, request_name);
+        #[cfg(feature = "metrics")]
+        let mut metrics_info_wrapper = MetricInfoWrapper::new(
+            req.method().clone().into(),
+            _function,
+            None,
+            self.metrics_tx.clone(),
+        );
         let future = self.https_client.request(req);
-
-        let step_start_instant = Instant::now();
         let response = if let Some(dur) = duration {
             match timeout(dur, future).await {
                 Ok(resp) => resp.map_err(ConsulError::ResponseError),
-                Err(_) => Err(ConsulError::TimeoutExceeded(dur)),
+                Err(_) => {
+                    #[cfg(feature = "metrics")]
+                    {
+                        metrics_info_wrapper.set_status(StatusCode::REQUEST_TIMEOUT);
+                        drop(metrics_info_wrapper.clone());
+                    }
+                    Err(ConsulError::TimeoutExceeded(dur))
+                }
             }
         } else {
             future.await.map_err(ConsulError::ResponseError)
         };
 
-        record_duration_metric_if_enabled(
-            &method,
-            request_name,
-            step_start_instant.elapsed().as_millis() as f64,
-        );
-        if response.is_err() {
-            record_failure_metric_if_enabled(&method, request_name);
-        }
-
-        let response = response?;
+        let response = response.inspect_err(|_| {
+            #[cfg(feature = "metrics")]
+            drop(metrics_info_wrapper.clone());
+        })?;
 
         #[cfg(feature = "trace")]
         crate::hyper_wrapper::annotate_span_for_response(&mut span, &response);
 
         let status = response.status();
         if status != hyper::StatusCode::OK {
-            record_failure_metric_if_enabled(&method, request_name);
+            #[cfg(feature = "metrics")]
+            {
+                metrics_info_wrapper.set_status(status);
+                drop(metrics_info_wrapper);
+            }
 
             let mut response_body = response
                 .into_body()
@@ -867,8 +869,6 @@ impl Consul {
         match response.into_body().collect().await.map(|b| b.aggregate()) {
             Ok(body) => Ok((Box::new(body), index)),
             Err(e) => {
-                record_failure_metric_if_enabled(&method, request_name);
-
                 #[cfg(feature = "trace")]
                 span.set_status(Status::error(e.to_string()));
                 Err(ConsulError::InvalidResponse(e))
@@ -953,33 +953,6 @@ fn add_query_param_separator(mut url: String, already_added: bool) -> String {
     }
 
     url
-}
-
-fn record_request_metric_if_enabled(_method: &Method, _function: &str) {
-    #[cfg(feature = "metrics")]
-    {
-        CONSUL_REQUESTS_TOTAL
-            .with_label_values(&[_method.as_str(), _function])
-            .inc();
-    }
-}
-
-fn record_failure_metric_if_enabled(_method: &Method, _function: &str) {
-    #[cfg(feature = "metrics")]
-    {
-        CONSUL_REQUESTS_FAILED_TOTAL
-            .with_label_values(&[_method.as_str(), _function])
-            .inc();
-    }
-}
-
-fn record_duration_metric_if_enabled(_method: &Method, _function: &str, _duration: f64) {
-    #[cfg(feature = "metrics")]
-    {
-        CONSUL_REQUESTS_DURATION_MS
-            .with_label_values(&[_method.as_str(), _function])
-            .observe(_duration);
-    }
 }
 
 #[cfg(test)]

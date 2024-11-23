@@ -1,6 +1,6 @@
 [package]
 name = "rs-consul"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Roblox"]
 edition = "2021"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
@@ -11,7 +11,7 @@ license-file = "LICENSE"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = []
-metrics = ["prometheus", "lazy_static"]
+metrics = []
 trace = ["dep:opentelemetry"]
 
 # keep this list sorted!
@@ -22,9 +22,7 @@ http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-roots", "ring", "http1"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio", "http2"] }
-lazy_static = { version = "1", optional = true }
-opentelemetry = { version = "0.24", optional = true }
-prometheus = { version = "0.13", optional = true }
+opentelemetry = { version = "0.27", optional = true }
 quick-error = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
