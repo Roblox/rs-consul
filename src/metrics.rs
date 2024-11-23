@@ -65,7 +65,7 @@ impl MetricInfoWrapper {
     pub fn set_status(&mut self, status: StatusCode) {
         self.metrics.status = Some(status);
     }
-    
+
     pub fn emit_metrics(&mut self) {
         if let Some(sender) = self.sender.take() {
             let mut metrics = self.metrics;
