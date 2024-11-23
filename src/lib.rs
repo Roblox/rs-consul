@@ -420,7 +420,7 @@ impl Consul {
                 #[cfg(feature = "metrics")]
                 {
                     metrics_info_wrapper.set_status(code);
-                    drop(metrics_info_wrapper.clone());
+                    metrics_info_wrapper.emit_metrics();
                 }
                 ConsulError::UnexpectedResponseCode(
                     code,
@@ -438,7 +438,7 @@ impl Consul {
             #[cfg(feature = "metrics")]
             {
                 metrics_info_wrapper.set_status(StatusCode::OK);
-                drop(metrics_info_wrapper.clone());
+                metrics_info_wrapper.emit_metrics();
             }
             return Ok(response);
         }
@@ -822,7 +822,7 @@ impl Consul {
                     #[cfg(feature = "metrics")]
                     {
                         metrics_info_wrapper.set_status(StatusCode::REQUEST_TIMEOUT);
-                        drop(metrics_info_wrapper.clone());
+                        metrics_info_wrapper.emit_metrics();
                     }
                     Err(ConsulError::TimeoutExceeded(dur))
                 }
@@ -833,7 +833,7 @@ impl Consul {
 
         let response = response.inspect_err(|_| {
             #[cfg(feature = "metrics")]
-            drop(metrics_info_wrapper.clone());
+            metrics_info_wrapper.emit_metrics();
         })?;
 
         #[cfg(feature = "trace")]
@@ -844,7 +844,7 @@ impl Consul {
             #[cfg(feature = "metrics")]
             {
                 metrics_info_wrapper.set_status(status);
-                drop(metrics_info_wrapper);
+                metrics_info_wrapper.emit_metrics();
             }
 
             let mut response_body = response

@@ -65,16 +65,20 @@ impl MetricInfoWrapper {
     pub fn set_status(&mut self, status: StatusCode) {
         self.metrics.status = Some(status);
     }
+
+    pub fn emit_metrics(&mut self) {
+        if let Some(sender) = self.sender.take() {
+            let mut metrics = self.metrics;
+            metrics.duration = Some(self.start.elapsed());
+            let _ = sender.send(metrics);
+        }
+    }
 }
 
 #[cfg(feature = "metrics")]
 impl Drop for MetricInfoWrapper {
     fn drop(&mut self) {
-        if let Some(sender) = self.sender.take() {
-            let mut metrics = self.metrics;
-            metrics.duration = Some(self.start.elapsed());
-            let _ = sender.send(self.metrics);
-        }
+        self.emit_metrics();
     }
 }
 
