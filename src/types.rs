@@ -456,6 +456,8 @@ pub struct Service {
     pub port: u16,
     /// Tags assigned to the service instance.
     pub tags: Vec<String>,
+    /// Meta assigned to the service instance.
+    pub meta: HashMap<String, String>,
 }
 
 pub(crate) fn serialize_duration_as_string<S>(
