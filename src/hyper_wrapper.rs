@@ -82,7 +82,9 @@ pub fn annotate_span_for_response<T>(span: &mut BoxedSpan, response: &hyper::Res
         ));
     }
 
-    if status != hyper::StatusCode::OK {
+    // Mark server errors (5xx) and client errors (4xx) as span errors per OpenTelemetry specs
+    // See: https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status
+    if status.is_client_error() || status.is_server_error() {
         span.set_status(Status::error(status.as_str().to_owned()));
     }
 }
