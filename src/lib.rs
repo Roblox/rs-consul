@@ -88,7 +88,7 @@ quick_error! {
         /// The consul server response could not be deserialized from bytes.
         ResponseStringDeserializationFailed(err: std::str::Utf8Error) {}
         /// The consul server response was something other than 200. The status code and the body of the response are included.
-        UnexpectedResponseCode(status_code: hyper::http::StatusCode, body: String) {}
+        UnexpectedResponseCode(status_code: hyper::http::StatusCode, body: Option<String>) {}
         /// The consul server refused a lock acquisition (usually because some other session has a lock).
         LockAcquisitionFailure(err: u64) {}
         /// Consul returned invalid UTF8.
@@ -117,9 +117,9 @@ quick_error! {
         ServiceInstanceResolutionFailed(service_name: String) {
             display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
         }
-        /// A transport error occured.
-        TransportError(kind: ureq::ErrorKind, message: String) {
-            display("Transport error: {} - {}", kind, message)
+        /// An error from ureq occured.
+        UReqError(err: ureq::Error) {
+            display("UReq error: {}", err)
         }
     }
 }
@@ -408,32 +408,30 @@ impl Consul {
             self.metrics_tx.clone(),
         );
         let result = ureq::put(&url)
-            .set(
+            .header(
                 "X-Consul-Token",
                 &self.config.token.clone().unwrap_or_default(),
             )
-            .send_bytes(&value);
+            .send(&value);
 
         let response = result.map_err(|e| match e {
-            ureq::Error::Status(code, response) => {
+            ureq::Error::StatusCode(code) => {
                 let code = hyper::StatusCode::from_u16(code).unwrap_or_default();
                 #[cfg(feature = "metrics")]
                 {
                     metrics_info_wrapper.set_status(code);
                     metrics_info_wrapper.emit_metrics();
                 }
-                ConsulError::UnexpectedResponseCode(
-                    code,
-                    response.into_string().unwrap_or_default(),
-                )
+                ConsulError::UnexpectedResponseCode(code, None)
             }
-            ureq::Error::Transport(t) => {
-                ConsulError::TransportError(t.kind(), t.message().unwrap_or_default().to_string())
-            }
+            e => ConsulError::UReqError(e),
         })?;
         let status = response.status();
         if status == 200 {
-            let val = response.into_string()?;
+            let val = response
+                .into_body()
+                .read_to_string()
+                .map_err(ConsulError::UReqError)?;
             let response: bool = std::str::FromStr::from_str(val.trim())?;
             #[cfg(feature = "metrics")]
             {
@@ -443,8 +441,14 @@ impl Consul {
             return Ok(response);
         }
 
-        let body = response.into_string()?;
-        Err(ConsulError::SyncUnexpectedResponseCode(status, body))
+        let body = response
+            .into_body()
+            .read_to_string()
+            .map_err(ConsulError::UReqError)?;
+        Err(ConsulError::SyncUnexpectedResponseCode(
+            hyper::StatusCode::as_u16(&status),
+            body,
+        ))
     }
 
     /// Deletes a key from Consul's KV store. See the [consul docs](https://www.consul.io/api-docs/kv#delete-key) for more information.
@@ -851,14 +855,14 @@ impl Consul {
                 .into_body()
                 .collect()
                 .await
-                .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?
+                .map_err(|e| ConsulError::UnexpectedResponseCode(status, Some(e.to_string())))?
                 .aggregate();
             let bytes = response_body.copy_to_bytes(response_body.remaining());
             let resp = std::str::from_utf8(&bytes)
-                .map_err(|e| ConsulError::UnexpectedResponseCode(status, e.to_string()))?;
+                .map_err(|e| ConsulError::UnexpectedResponseCode(status, Some(e.to_string())))?;
             return Err(ConsulError::UnexpectedResponseCode(
                 status,
-                resp.to_string(),
+                Some(resp.to_string()),
             ));
         }
         let index = match response.headers().get("x-consul-index") {

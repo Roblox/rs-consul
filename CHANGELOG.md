@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.9.0 - 2025-02-12
+
+- Upgrade `opentelemetry` to `0.28` from `0.27`.
+- Upgrade `ureq` to `0.3` from `0.2`.
+- Align span status per OpenTelemetry specification, thanks to @thevilledev.
+
 ## 0.8.2 - 2024-11-22
 
 - Fix metrics being emitted more than once.
