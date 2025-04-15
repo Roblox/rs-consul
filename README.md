@@ -15,6 +15,69 @@ Simply include the rs-consul in your Cargo dependencies.
 [dependencies]
 rs-consul = "0.9.0"
 ```
+## Usage
+### Initialize the client
+#### Environment Configuration (Recommended)
+The client can be configured automatically using environment variables:
+```rust
+use rs_consul::{types::*, Config, Consul};
+
+let consul_config = Config::from_env();
+let consul = Consul::new(consul_config);
+```
+#### Manual Configuration
+Alternatively, you can configure the client manually:
+```rust
+let consul_config = Config {
+    address: "http://localhost:8500".to_string(), 
+    token: None, // No token required in development mode
+    ..Default::default() // Uses default values for other settings
+};
+
+let consul = Consul::new(consul_config);
+```
+### Registering a Service
+```rust
+    let node_id = "root-node"; //node name
+    let service_name = "new-service-1"; //service name
+
+    let payload = RegisterEntityPayload {
+        ID: None,
+        Node: node_id.to_string(),
+        Address: "127.0.0.1".to_string(), //server address
+        Datacenter: None,
+        TaggedAddresses: Default::default(),
+        NodeMeta: Default::default(),
+        Service: Some(RegisterEntityService {
+            ID: None,
+            Service: service_name.to_string(),
+            Tags: vec![],
+            TaggedAddresses: Default::default(),
+            Meta: Default::default(),
+            Port: Some(42424), 
+            Namespace: None,
+        }),
+        Check: None,
+        SkipNodeUpdate: None,
+    };
+
+    consul.register_entity(&payload).await.unwrap();
+```
+### Deregistring a service
+```rust
+    let node_id = "root-node";
+    let service_name = "new-service-1";
+
+    let payload = DeregisterEntityPayload {
+        Node: Some(node_id.to_string()),
+        Datacenter: None,
+        CheckID: None,
+        ServiceID: Some(service_name.to_string()),
+        Namespace: None,
+    };
+    consul.deregister_entity(&payload).await.unwrap();
+```
+
 ## Development
 
 ```bash
