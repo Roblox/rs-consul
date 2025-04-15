@@ -15,7 +15,6 @@ Simply include the rs-consul in your Cargo dependencies.
 [dependencies]
 rs-consul = "0.9.0"
 ```
-
 ## Development
 
 ```bash
