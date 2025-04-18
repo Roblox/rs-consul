@@ -1,5 +1,5 @@
 use rs_consul::*;
-pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
+type Result<T> = std::result::Result<T, rs_consul::errors::ConsulError>;
 
 pub(crate) fn get_client() -> Consul {
     let conf: Config = Config::from_env();

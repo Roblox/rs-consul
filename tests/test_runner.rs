@@ -10,6 +10,7 @@ pub use types::*;
 mod tests {
     use std::time::Duration;
 
+    use rs_consul::errors::ConsulError;
     use tokio::time::sleep;
 
     use super::*;

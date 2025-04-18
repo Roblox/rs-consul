@@ -47,6 +47,10 @@ use slog_scope::{error, info};
 use tokio::time::timeout;
 
 use errors::*;
+/// Consul Distributed lock
+mod lock;
+/// General utils tools
+mod utils;
 #[cfg(feature = "metrics")]
 use http::StatusCode;
 
@@ -64,7 +68,7 @@ pub use metrics::MetricInfo;
 pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
-/// Consul errors
+/// Consul errors and Result type
 pub mod errors;
 #[cfg(feature = "trace")]
 mod hyper_wrapper;
@@ -120,46 +124,6 @@ impl Config {
             token: Some(token),
             hyper_builder: default_builder(),
         }
-    }
-}
-
-/// Represents a lock against Consul.
-/// The lifetime of this object defines the validity of the lock against consul.
-/// When the object is dropped, the lock is attempted to be released for the next consumer.
-#[derive(Clone, Debug)]
-pub struct Lock<'a> {
-    /// The session ID of the lock.
-    pub session_id: String,
-    /// The key for the lock.
-    pub key: String,
-    /// The timeout of the session and the lock.
-    pub timeout: std::time::Duration,
-    /// The namespace this lock exists in.
-    pub namespace: String,
-    /// The datacenter of this lock.
-    pub datacenter: String,
-    /// The data in this lock's key
-    pub value: Option<Vec<u8>>,
-    /// The consul client this lock was acquired using.
-    pub consul: &'a Consul,
-}
-
-impl Drop for Lock<'_> {
-    fn drop(&mut self) {
-        let req = CreateOrUpdateKeyRequest {
-            key: &self.key,
-            namespace: &self.namespace,
-            datacenter: &self.datacenter,
-            release: &self.session_id,
-            ..Default::default()
-        };
-
-        let val = self.value.clone().unwrap_or_default();
-
-        // This can fail and that's okay. Consumers should not be using long session or locks.
-        // Consul prefers liveness over safety so there's a chance the lock gets dropped.
-        // For safe consumer patterns, see https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration#next-steps
-        let _res = self.consul.create_or_update_key_sync(req, val);
     }
 }
 
@@ -414,7 +378,7 @@ impl Consul {
             url.push_str(&format!("&cas={}", request.check_and_set));
         }
 
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let (response_body, _index) = self
             .execute_request(
@@ -426,76 +390,6 @@ impl Consul {
             .await?;
         serde_json::from_reader(response_body.reader())
             .map_err(ConsulError::ResponseDeserializationFailed)
-    }
-
-    /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
-    /// # Arguments:
-    /// - request - the [LockRequest](consul::types::LockRequest)
-    /// # Errors:
-    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_lock(&self, request: LockRequest<'_>, value: &[u8]) -> Result<Lock<'_>> {
-        let session = self.get_session(request).await?;
-        let req = CreateOrUpdateKeyRequest {
-            key: request.key,
-            namespace: request.namespace,
-            datacenter: request.datacenter,
-            acquire: &session.id,
-            ..Default::default()
-        };
-        let value_copy = value.to_vec();
-        let (lock_acquisition_result, _index) = self.create_or_update_key(req, value_copy).await?;
-        if lock_acquisition_result {
-            let value_copy = value.to_vec();
-            Ok(Lock {
-                timeout: request.timeout,
-                key: request.key.to_string(),
-                session_id: session.id,
-                consul: self,
-                datacenter: request.datacenter.to_string(),
-                namespace: request.namespace.to_string(),
-                value: Some(value_copy),
-            })
-        } else {
-            let watch_req = ReadKeyRequest {
-                key: request.key,
-                datacenter: request.datacenter,
-                namespace: request.namespace,
-                index: Some(0),
-                wait: std::time::Duration::from_secs(0),
-                ..Default::default()
-            };
-            let lock_index_req = self.build_read_key_req(watch_req);
-            let (_watch, index) = self
-                .execute_request(
-                    lock_index_req,
-                    BoxBody::new(http_body_util::Empty::<Bytes>::new()),
-                    None,
-                    Function::ReadKey,
-                )
-                .await?;
-            Err(ConsulError::LockAcquisitionFailure(index))
-        }
-    }
-
-    /// Watches lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration#watch-the-session) for more information.
-    /// # Arguments:
-    /// - request - the [LockWatchRequest](consul::types::LockWatchRequest)
-    /// # Errors:
-    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn watch_lock<'a>(
-        &self,
-        request: LockWatchRequest<'_>,
-    ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
-        let req = ReadKeyRequest {
-            key: request.key,
-            namespace: request.namespace,
-            datacenter: request.datacenter,
-            index: request.index,
-            wait: request.wait,
-            consistency: request.consistency,
-            ..Default::default()
-        };
-        self.read_key(req).await
     }
 
     /// Registers or updates entries in consul's global catalog.
@@ -550,7 +444,7 @@ impl Consul {
     ) -> Result<ResponseMeta<Vec<String>>> {
         let mut uri = format!("{}/v1/catalog/services", self.config.address);
         let query_opts = query_opts.unwrap_or_default();
-        add_query_option_params(&mut uri, &query_opts, '?');
+        utils::add_query_option_params(&mut uri, &query_opts, '?');
 
         let request = hyper::Request::builder()
             .method(Method::GET)
@@ -686,7 +580,7 @@ impl Consul {
                 ));
             }
         }
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req.uri(url)
     }
 
@@ -701,7 +595,7 @@ impl Consul {
         let mut req = hyper::Request::builder().method(Method::PUT);
         let mut url = String::new();
         url.push_str(&format!("{}/v1/session/create?", self.config.address));
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let create_session_json =
             serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
@@ -737,7 +631,7 @@ impl Consul {
         if let Some(filter) = request.filter {
             url.push_str(&format!("&filter={}", filter));
         }
-        add_query_option_params(&mut url, query_opts, '&');
+        utils::add_query_option_params(&mut url, query_opts, '&');
         req.uri(url)
     }
 
@@ -832,78 +726,27 @@ impl Consul {
         url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key));
         let mut added_query_param = false;
         if request.flags != 0 {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("flags={}", request.flags));
             added_query_param = true;
         }
         if !request.acquire.is_empty() {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("acquire={}", request.acquire));
             added_query_param = true;
         }
         if !request.release.is_empty() {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("release={}", request.release));
             added_query_param = true;
         }
         if let Some(cas_idx) = request.check_and_set {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("cas={}", cas_idx));
         }
 
-        add_namespace_and_datacenter(url, request.namespace, request.datacenter)
+        utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter)
     }
-}
-
-fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut separator: char) {
-    if let Some(ns) = &query_opts.namespace {
-        if !ns.is_empty() {
-            uri.push_str(&format!("{}ns={}", separator, ns));
-            separator = '&';
-        }
-    }
-    if let Some(dc) = &query_opts.datacenter {
-        if !dc.is_empty() {
-            uri.push_str(&format!("{}dc={}", separator, dc));
-            separator = '&';
-        }
-    }
-    if let Some(idx) = query_opts.index {
-        uri.push_str(&format!("{}index={}", separator, idx));
-        separator = '&';
-        if let Some(wait) = query_opts.wait {
-            uri.push_str(&format!(
-                "{}wait={}",
-                separator,
-                types::duration_as_string(&wait)
-            ));
-        }
-    }
-}
-
-fn add_namespace_and_datacenter<'a>(
-    mut url: String,
-    namespace: &'a str,
-    datacenter: &'a str,
-) -> String {
-    if !namespace.is_empty() {
-        url.push_str(&format!("&ns={}", namespace));
-    }
-    if !datacenter.is_empty() {
-        url.push_str(&format!("&dc={}", datacenter));
-    }
-
-    url
-}
-
-fn add_query_param_separator(mut url: String, already_added: bool) -> String {
-    if already_added {
-        url.push('&');
-    } else {
-        url.push('?');
-    }
-
-    url
 }
 
 #[cfg(test)]
