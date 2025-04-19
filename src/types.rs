@@ -458,6 +458,63 @@ pub struct Service {
     pub tags: Vec<String>,
 }
 
+/// Information related ACL token.
+/// See https://developer.hashicorp.com/consul/docs/security/acl/tokens for more information.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ACLToken {
+    /// Unique ID
+    #[serde(rename = "AccessorID")]
+    pub accessor_id: String,
+    /// Secret for authenticatioIDn
+    #[serde(rename = "SecretID")]
+    pub secret_id: String,
+    /// Description
+    pub description: String,
+    /// Policies
+    pub policies: Vec<ACLTokenPolicyLink>,
+    /// Token only valid in this datacenter
+    #[serde(default)]
+    pub local: bool,
+
+    ///
+    pub create_time: String,
+
+    ///
+    pub hash: Option<String>,
+
+    ///
+    pub create_index: u64,
+
+    ///
+    pub modify_index: u64,
+}
+
+/// Information related to Policies
+/// see https://developer.hashicorp.com/consul/docs/security/acl/acl-policies for more information
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ACLTokenPolicyLink {
+    /// Policy ID
+    #[serde(rename = "ID")]
+    pub id: String,
+    /// Policy name
+    pub name: String,
+}
+
+/// Payload to create an ACL token
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateACLTokenRequest {
+    /// Description
+    pub description: String,
+    /// Policies IDs/names
+    pub policies: Vec<String>,
+    /// Local to datacenter
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local: Option<bool>,
+}
+
 pub(crate) fn serialize_duration_as_string<S>(
     duration: &Duration,
     serializer: S,
