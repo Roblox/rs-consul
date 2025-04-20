@@ -16,6 +16,7 @@ Simply include the rs-consul in your Cargo dependencies.
 rs-consul = "0.9.0"
 ```
 ## Usage
+Check [/examples](/examples) for more detailed usage
 ### Initialize the client
 #### Environment Configuration (Recommended)
 The client can be configured automatically using environment variables:
@@ -36,7 +37,7 @@ let consul_config = Config {
 
 let consul = Consul::new(consul_config);
 ```
-### Registering a Service
+### Register a Service
 ```rust
     let node_id = "root-node"; //node name
     let service_name = "new-service-1"; //service name
@@ -63,7 +64,7 @@ let consul = Consul::new(consul_config);
 
     consul.register_entity(&payload).await.unwrap();
 ```
-### Deregistring a service
+### Deregister a service
 ```rust
     let node_id = "root-node";
     let service_name = "new-service-1";
