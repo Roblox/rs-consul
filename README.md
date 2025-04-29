@@ -13,7 +13,7 @@ Simply include the rs-consul in your Cargo dependencies.
 
 ```toml
 [dependencies]
-rs-consul = "0.4.0"
+rs-consul = "0.9.0"
 ```
 
 ## Development
