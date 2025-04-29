@@ -1,5 +1,6 @@
 [package]
 name = "rs-consul"
+# Don't forget to update the readme with the new version!
 version = "0.9.0"
 authors = ["Roblox"]
 edition = "2021"
