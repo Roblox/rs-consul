@@ -30,8 +30,7 @@ serde_json = "1.0"
 slog-scope = "4"
 smart-default = "0.7"
 tokio = { version = "1", features = ["full"] }
-tokio-test = "0.4"  # Explicitly add if missing
 ureq = { version = "3", features = ["json"] }
-[[example]]
-name = "register_service"       # Build with `cargo run --example basic`
-path = "examples/register_service.rs"
+
+[dev-dependencies]
+tokio-test = "0.4"  # Explicitly add if missing
