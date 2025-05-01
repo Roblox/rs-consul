@@ -46,8 +46,8 @@ use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
-use errors::*;
-pub use errors::*;
+pub use errors::ConsulError;
+use errors::Result;
 /// Consul Distributed lock
 mod lock;
 /// General utils tools
@@ -71,7 +71,7 @@ pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
 /// Consul errors and Result type
-pub mod errors;
+mod errors;
 #[cfg(feature = "trace")]
 mod hyper_wrapper;
 /// Types exposed for metrics on the consuming application without taking a dependency on a metrics library or a specific implementation.
