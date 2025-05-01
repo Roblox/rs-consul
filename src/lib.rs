@@ -47,6 +47,7 @@ use slog_scope::{error, info};
 use tokio::time::timeout;
 
 use errors::*;
+pub use errors::*;
 /// Consul Distributed lock
 mod lock;
 /// General utils tools
@@ -63,6 +64,7 @@ use opentelemetry::trace::Span;
 #[cfg(feature = "trace")]
 use opentelemetry::trace::Status;
 
+pub use lock::*;
 #[cfg(feature = "metrics")]
 pub use metrics::MetricInfo;
 pub use metrics::{Function, HttpMethod};
