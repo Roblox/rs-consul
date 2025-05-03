@@ -33,8 +33,8 @@ use metrics::MetricInfoWrapper;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::env;
 use std::time::Duration;
-use std::{env, str::Utf8Error};
 
 use base64::Engine;
 use http_body_util::combinators::BoxBody;
@@ -42,11 +42,16 @@ use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::{body::Buf, Method};
 use hyper_util::client::legacy::{connect::HttpConnector, Builder, Client};
-use quick_error::quick_error;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
 
+pub use errors::ConsulError;
+use errors::Result;
+/// Consul Distributed lock
+mod lock;
+/// General utils tools
+mod utils;
 #[cfg(feature = "metrics")]
 use http::StatusCode;
 
@@ -59,72 +64,20 @@ use opentelemetry::trace::Span;
 #[cfg(feature = "trace")]
 use opentelemetry::trace::Status;
 
+pub use lock::*;
 #[cfg(feature = "metrics")]
 pub use metrics::MetricInfo;
 pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
+/// Consul errors and Result type
+mod errors;
 #[cfg(feature = "trace")]
 mod hyper_wrapper;
 /// Types exposed for metrics on the consuming application without taking a dependency on a metrics library or a specific implementation.
 mod metrics;
 /// The strongly typed data structures representing canonical consul objects.
 pub mod types;
-
-quick_error! {
-    /// The error type returned from all calls into this this crate.
-    #[derive(Debug)]
-    pub enum ConsulError {
-        /// The request was invalid and could not be serialized to valid json.
-        InvalidRequest(err: serde_json::error::Error) {}
-        /// The request was invalid and could not be converted into a proper http request.
-        RequestError(err: http::Error) {}
-        /// The consul server response could not be converted into a proper http response.
-        ResponseError(err: hyper_util::client::legacy::Error) {}
-        /// The consul server response was invalid.
-        InvalidResponse(err: hyper::Error) {}
-        /// The consul server response could not be deserialized from json.
-        ResponseDeserializationFailed(err: serde_json::error::Error) {}
-        /// The consul server response could not be deserialized from bytes.
-        ResponseStringDeserializationFailed(err: std::str::Utf8Error) {}
-        /// The consul server response was something other than 200. The status code and the body of the response are included.
-        UnexpectedResponseCode(status_code: hyper::http::StatusCode, body: Option<String>) {}
-        /// The consul server refused a lock acquisition (usually because some other session has a lock).
-        LockAcquisitionFailure(err: u64) {}
-        /// Consul returned invalid UTF8.
-        InvalidUtf8(err: Utf8Error) {
-            from()
-        }
-        /// Consul returned invalid base64.
-        InvalidBase64(err: base64::DecodeError) {
-            from()
-        }
-        /// IO error from sync api.
-        SyncIoError(err: std::io::Error) {
-            from()
-        }
-        /// Response parse error from sync api.
-        SyncInvalidResponseError(err: std::str::ParseBoolError) {
-            from()
-        }
-        /// Unexpected response code from sync api.
-        SyncUnexpectedResponseCode(status_code: u16, body: String) {}
-        /// Consul request exceeded specified timeout.
-        TimeoutExceeded(timeout: std::time::Duration) {
-            display("Consul request exceeded timeout of {:?}", timeout)
-        }
-        /// Unable to resolve the service's instances in Consul.
-        ServiceInstanceResolutionFailed(service_name: String) {
-            display("Unable to resolve service '{}' to a concrete list of addresses and ports for its instances via consul.", service_name)
-        }
-        /// An error from ureq occured.
-        UReqError(err: ureq::Error) {
-            display("UReq error: {}", err)
-        }
-    }
-}
-
-pub(crate) type Result<T> = std::result::Result<T, ConsulError>;
 
 /// The config necessary to create a new consul client.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -173,46 +126,6 @@ impl Config {
             token: Some(token),
             hyper_builder: default_builder(),
         }
-    }
-}
-
-/// Represents a lock against Consul.
-/// The lifetime of this object defines the validity of the lock against consul.
-/// When the object is dropped, the lock is attempted to be released for the next consumer.
-#[derive(Clone, Debug)]
-pub struct Lock<'a> {
-    /// The session ID of the lock.
-    pub session_id: String,
-    /// The key for the lock.
-    pub key: String,
-    /// The timeout of the session and the lock.
-    pub timeout: std::time::Duration,
-    /// The namespace this lock exists in.
-    pub namespace: String,
-    /// The datacenter of this lock.
-    pub datacenter: String,
-    /// The data in this lock's key
-    pub value: Option<Vec<u8>>,
-    /// The consul client this lock was acquired using.
-    pub consul: &'a Consul,
-}
-
-impl Drop for Lock<'_> {
-    fn drop(&mut self) {
-        let req = CreateOrUpdateKeyRequest {
-            key: &self.key,
-            namespace: &self.namespace,
-            datacenter: &self.datacenter,
-            release: &self.session_id,
-            ..Default::default()
-        };
-
-        let val = self.value.clone().unwrap_or_default();
-
-        // This can fail and that's okay. Consumers should not be using long session or locks.
-        // Consul prefers liveness over safety so there's a chance the lock gets dropped.
-        // For safe consumer patterns, see https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration#next-steps
-        let _res = self.consul.create_or_update_key_sync(req, val);
     }
 }
 
@@ -467,7 +380,7 @@ impl Consul {
             url.push_str(&format!("&cas={}", request.check_and_set));
         }
 
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let (response_body, _index) = self
             .execute_request(
@@ -479,76 +392,6 @@ impl Consul {
             .await?;
         serde_json::from_reader(response_body.reader())
             .map_err(ConsulError::ResponseDeserializationFailed)
-    }
-
-    /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
-    /// # Arguments:
-    /// - request - the [LockRequest](consul::types::LockRequest)
-    /// # Errors:
-    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn get_lock(&self, request: LockRequest<'_>, value: &[u8]) -> Result<Lock<'_>> {
-        let session = self.get_session(request).await?;
-        let req = CreateOrUpdateKeyRequest {
-            key: request.key,
-            namespace: request.namespace,
-            datacenter: request.datacenter,
-            acquire: &session.id,
-            ..Default::default()
-        };
-        let value_copy = value.to_vec();
-        let (lock_acquisition_result, _index) = self.create_or_update_key(req, value_copy).await?;
-        if lock_acquisition_result {
-            let value_copy = value.to_vec();
-            Ok(Lock {
-                timeout: request.timeout,
-                key: request.key.to_string(),
-                session_id: session.id,
-                consul: self,
-                datacenter: request.datacenter.to_string(),
-                namespace: request.namespace.to_string(),
-                value: Some(value_copy),
-            })
-        } else {
-            let watch_req = ReadKeyRequest {
-                key: request.key,
-                datacenter: request.datacenter,
-                namespace: request.namespace,
-                index: Some(0),
-                wait: std::time::Duration::from_secs(0),
-                ..Default::default()
-            };
-            let lock_index_req = self.build_read_key_req(watch_req);
-            let (_watch, index) = self
-                .execute_request(
-                    lock_index_req,
-                    BoxBody::new(http_body_util::Empty::<Bytes>::new()),
-                    None,
-                    Function::ReadKey,
-                )
-                .await?;
-            Err(ConsulError::LockAcquisitionFailure(index))
-        }
-    }
-
-    /// Watches lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration#watch-the-session) for more information.
-    /// # Arguments:
-    /// - request - the [LockWatchRequest](consul::types::LockWatchRequest)
-    /// # Errors:
-    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn watch_lock<'a>(
-        &self,
-        request: LockWatchRequest<'_>,
-    ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
-        let req = ReadKeyRequest {
-            key: request.key,
-            namespace: request.namespace,
-            datacenter: request.datacenter,
-            index: request.index,
-            wait: request.wait,
-            consistency: request.consistency,
-            ..Default::default()
-        };
-        self.read_key(req).await
     }
 
     /// Registers or updates entries in consul's global catalog.
@@ -603,7 +446,7 @@ impl Consul {
     ) -> Result<ResponseMeta<Vec<String>>> {
         let mut uri = format!("{}/v1/catalog/services", self.config.address);
         let query_opts = query_opts.unwrap_or_default();
-        add_query_option_params(&mut uri, &query_opts, '?');
+        utils::add_query_option_params(&mut uri, &query_opts, '?');
 
         let request = hyper::Request::builder()
             .method(Method::GET)
@@ -739,7 +582,7 @@ impl Consul {
                 ));
             }
         }
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req.uri(url)
     }
 
@@ -754,7 +597,7 @@ impl Consul {
         let mut req = hyper::Request::builder().method(Method::PUT);
         let mut url = String::new();
         url.push_str(&format!("{}/v1/session/create?", self.config.address));
-        url = add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
         req = req.uri(url);
         let create_session_json =
             serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
@@ -790,7 +633,7 @@ impl Consul {
         if let Some(filter) = request.filter {
             url.push_str(&format!("&filter={}", filter));
         }
-        add_query_option_params(&mut url, query_opts, '&');
+        utils::add_query_option_params(&mut url, query_opts, '&');
         req.uri(url)
     }
 
@@ -885,309 +728,32 @@ impl Consul {
         url.push_str(&format!("{}/v1/kv/{}", self.config.address, request.key));
         let mut added_query_param = false;
         if request.flags != 0 {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("flags={}", request.flags));
             added_query_param = true;
         }
         if !request.acquire.is_empty() {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("acquire={}", request.acquire));
             added_query_param = true;
         }
         if !request.release.is_empty() {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("release={}", request.release));
             added_query_param = true;
         }
         if let Some(cas_idx) = request.check_and_set {
-            url = add_query_param_separator(url, added_query_param);
+            url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("cas={}", cas_idx));
         }
 
-        add_namespace_and_datacenter(url, request.namespace, request.datacenter)
+        utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter)
     }
-}
-
-fn add_query_option_params(uri: &mut String, query_opts: &QueryOptions, mut separator: char) {
-    if let Some(ns) = &query_opts.namespace {
-        if !ns.is_empty() {
-            uri.push_str(&format!("{}ns={}", separator, ns));
-            separator = '&';
-        }
-    }
-    if let Some(dc) = &query_opts.datacenter {
-        if !dc.is_empty() {
-            uri.push_str(&format!("{}dc={}", separator, dc));
-            separator = '&';
-        }
-    }
-    if let Some(idx) = query_opts.index {
-        uri.push_str(&format!("{}index={}", separator, idx));
-        separator = '&';
-        if let Some(wait) = query_opts.wait {
-            uri.push_str(&format!(
-                "{}wait={}",
-                separator,
-                types::duration_as_string(&wait)
-            ));
-        }
-    }
-}
-
-fn add_namespace_and_datacenter<'a>(
-    mut url: String,
-    namespace: &'a str,
-    datacenter: &'a str,
-) -> String {
-    if !namespace.is_empty() {
-        url.push_str(&format!("&ns={}", namespace));
-    }
-    if !datacenter.is_empty() {
-        url.push_str(&format!("&dc={}", datacenter));
-    }
-
-    url
-}
-
-fn add_query_param_separator(mut url: String, already_added: bool) -> String {
-    if already_added {
-        url.push('&');
-    } else {
-        url.push('?');
-    }
-
-    url
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use tokio::time::sleep;
-
     use super::*;
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_read_key() {
-        let consul = get_client();
-        let key = "test/consul/read";
-        let string_value = "This is a test";
-        let res = create_or_update_key_value(&consul, key, string_value).await;
-        assert_expected_result_with_index(res);
-
-        let res = read_key(&consul, key).await.unwrap();
-        let index = res.index;
-        verify_single_value_matches(Ok(res), string_value);
-
-        let res = read_key(&consul, key).await.unwrap();
-        assert_eq!(res.index, index);
-        create_or_update_key_value(&consul, key, string_value)
-            .await
-            .unwrap();
-        assert_eq!(res.index, index);
-        create_or_update_key_value(&consul, key, "This is a new test")
-            .await
-            .unwrap();
-        let res = read_key(&consul, key).await.unwrap();
-        assert!(res.index > index);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_register_and_retrieve_services() {
-        let consul = get_client();
-
-        let new_service_name = "test-service-44".to_string();
-        register_entity(&consul, &new_service_name, "local").await;
-
-        assert!(is_registered(&consul, &new_service_name).await);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_deregister_and_retrieve_services() {
-        let consul = get_client();
-
-        let new_service_name = "test-service-45".to_string();
-        let node_id = "local";
-        register_entity(&consul, &new_service_name, node_id).await;
-
-        let payload = DeregisterEntityPayload {
-            Node: Some(node_id.to_string()),
-            Datacenter: None,
-            CheckID: None,
-            ServiceID: None,
-            Namespace: None,
-        };
-        consul
-            .deregister_entity(&payload)
-            .await
-            .expect("expected deregister_entity request to succeed");
-
-        assert!(!is_registered(&consul, &new_service_name).await);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn get_services_nodes() {
-        let consul = get_client();
-        let req = GetServiceNodesRequest {
-            service: "nonexistent",
-            passing: true,
-            ..Default::default()
-        };
-        let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
-        assert_eq!(response.len(), 0);
-
-        let req = GetServiceNodesRequest {
-            service: "test-service",
-            passing: true,
-            ..Default::default()
-        };
-        let ResponseMeta { response, .. } = consul.get_service_nodes(req, None).await.unwrap();
-        assert_eq!(response.len(), 3);
-
-        let addresses: Vec<String> = response
-            .iter()
-            .map(|sn| sn.service.address.clone())
-            .collect();
-        let expected_addresses = [
-            "1.1.1.1".to_string(),
-            "2.2.2.2".to_string(),
-            "3.3.3.3".to_string(),
-        ];
-        assert!(expected_addresses
-            .iter()
-            .all(|item| addresses.contains(item)));
-
-        let tags: Vec<String> = response
-            .iter()
-            .flat_map(|sn| sn.service.tags.clone().into_iter())
-            .collect();
-        let expected_tags = [
-            "first".to_string(),
-            "second".to_string(),
-            "third".to_string(),
-        ];
-        assert_eq!(expected_tags.len(), 3);
-        assert!(expected_tags.iter().all(|tag| tags.contains(tag)));
-
-        let _: Vec<_> = response
-            .iter()
-            .map(|sn| assert_eq!("dc1", sn.node.datacenter))
-            .collect();
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_delete_key() {
-        let consul = get_client();
-        let key = "test/consul/again";
-        let string_value = "This is a new test";
-        let res = create_or_update_key_value(&consul, key, string_value).await;
-        assert_expected_result_with_index(res);
-
-        let res = delete_key(&consul, key).await;
-        assert_expected_result(res);
-
-        let res = read_key(&consul, key).await.unwrap_err();
-        match res {
-            ConsulError::UnexpectedResponseCode(code, _body) => {
-                assert_eq!(code, hyper::http::StatusCode::NOT_FOUND)
-            }
-            _ => panic!(
-                "Expected ConsulError::UnexpectedResponseCode, got {:#?}",
-                res
-            ),
-        };
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_release_lock() {
-        let consul = get_client();
-        let key = "test/consul/lock";
-        let string_value = "This is a lock test";
-        let new_string_value = "This is a changed lock test";
-        let req = LockRequest {
-            key,
-            behavior: LockExpirationBehavior::Release,
-            lock_delay: std::time::Duration::from_secs(1),
-            ..Default::default()
-        };
-        let session_id: String;
-        {
-            let res = consul.get_lock(req, string_value.as_bytes()).await;
-            assert!(res.is_ok());
-            let mut lock = res.unwrap();
-            let res2 = consul.get_lock(req, string_value.as_bytes()).await;
-            assert!(res2.is_err());
-            let err = res2.unwrap_err();
-            match err {
-                ConsulError::LockAcquisitionFailure(_index) => (),
-                _ => panic!(
-                    "Expected ConsulError::LockAcquisitionFailure, got {:#?}",
-                    err
-                ),
-            }
-            session_id = lock.session_id.to_string();
-            // Lets change the value before dropping the lock to ensure the change is persisted when the lock is dropped.
-            lock.value = Some(new_string_value.as_bytes().to_vec())
-            // lock gets dropped here.
-        }
-
-        sleep(Duration::from_secs(2)).await;
-        let key_resp = read_key(&consul, key).await;
-        verify_single_value_matches(key_resp, new_string_value);
-
-        let req = LockRequest {
-            key,
-            behavior: LockExpirationBehavior::Delete,
-            lock_delay: std::time::Duration::from_secs(1),
-            session_id: &session_id,
-            ..Default::default()
-        };
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
-        assert!(res.is_ok());
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn create_and_watch_lock() {
-        let consul = get_client();
-        let key = "test/consul/watchedlock";
-        let string_value = "This is a lock test";
-        let req = LockRequest {
-            key,
-            behavior: LockExpirationBehavior::Release,
-            lock_delay: std::time::Duration::from_secs(0),
-            ..Default::default()
-        };
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
-        assert!(res.is_ok());
-        let lock = res.unwrap();
-        let res2 = consul.get_lock(req, string_value.as_bytes()).await;
-        assert!(res2.is_err());
-        let err = res2.unwrap_err();
-        let start_index = match err {
-            ConsulError::LockAcquisitionFailure(index) => index,
-            _ => panic!(
-                "Expected ConsulError::LockAcquisitionFailure, got {:#?}",
-                err
-            ),
-        };
-
-        assert!(start_index > 0);
-        let watch_req = LockWatchRequest {
-            key,
-            consistency: ConsistencyMode::Consistent,
-            index: Some(start_index),
-            wait: Duration::from_secs(60),
-            ..Default::default()
-        };
-        // The lock will timeout and this this will return.
-        let res = consul.watch_lock(watch_req).await;
-        assert!(res.is_ok());
-        std::mem::drop(lock); // This ensures the lock is not dropped until after the request to watch it completes.
-
-        let res = consul.get_lock(req, string_value.as_bytes()).await;
-        assert!(res.is_ok());
-    }
-
     #[test]
     fn test_service_node_parsing() {
         let node = Node {
@@ -1230,186 +796,5 @@ mod tests {
         let (host, port) = Consul::parse_host_port_from_service_node_response(sn);
         assert_eq!(service.port, port);
         assert_eq!(node.address, host);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn properly_handle_check_and_set() {
-        let consul = get_client();
-        let key = "test/consul/proper_cas_handling";
-        let string_value1 = "This is CAS test";
-        let req = CreateOrUpdateKeyRequest {
-            key,
-            check_and_set: Some(0),
-            ..Default::default()
-        };
-
-        // Key does not exist, with CAS set and modify index set to 0
-        // it should be created.
-        let (set, _) = consul
-            .create_or_update_key(req.clone(), string_value1.as_bytes().to_vec())
-            .await
-            .expect("failed to create key initially");
-        assert!(set);
-        let (value, mod_idx1) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value1, &value.unwrap());
-
-        // Subsequent request with CAS set to 0 should not override the
-        // value.
-        let string_value2 = "This is CAS test - not valid";
-        let (set, _) = consul
-            .create_or_update_key(req, string_value2.as_bytes().to_vec())
-            .await
-            .expect("failed to run subsequent create_or_update_key");
-        assert!(!set);
-        // Value and modify index should not have changed because set failed.
-        let (value, mod_idx2) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value1, &value.unwrap());
-        assert_eq!(mod_idx1, mod_idx2);
-
-        // Successfully set value with proper CAS value.
-        let req = CreateOrUpdateKeyRequest {
-            key,
-            check_and_set: Some(mod_idx1),
-            ..Default::default()
-        };
-        let string_value3 = "This is correct CAS updated";
-        let (set, _) = consul
-            .create_or_update_key(req, string_value3.as_bytes().to_vec())
-            .await
-            .expect("failed to run create_or_update_key with proper CAS value");
-        assert!(set);
-        // Verify that value was updated and the index changed.
-        let (value, mod_idx3) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value3, &value.unwrap());
-        assert_ne!(mod_idx1, mod_idx3);
-
-        // Successfully set value without CAS.
-        let req = CreateOrUpdateKeyRequest {
-            key,
-            check_and_set: None,
-            ..Default::default()
-        };
-        let string_value4 = "This is non CAS update";
-        let (set, _) = consul
-            .create_or_update_key(req, string_value4.as_bytes().to_vec())
-            .await
-            .expect("failed to run create_or_update_key without CAS");
-        assert!(set);
-        // Verify that value was updated and the index changed.
-        let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
-        assert_eq!(string_value4, &value.unwrap());
-        assert_ne!(mod_idx3, mod_idx4);
-    }
-
-    async fn register_entity(consul: &Consul, service_name: &String, node_id: &str) {
-        let ResponseMeta {
-            response: service_names_before_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        assert!(!service_names_before_register.contains(service_name));
-
-        let payload = RegisterEntityPayload {
-            ID: None,
-            Node: node_id.to_string(),
-            Address: "127.0.0.1".to_string(),
-            Datacenter: None,
-            TaggedAddresses: Default::default(),
-            NodeMeta: Default::default(),
-            Service: Some(RegisterEntityService {
-                ID: None,
-                Service: service_name.clone(),
-                Tags: vec![],
-                TaggedAddresses: Default::default(),
-                Meta: Default::default(),
-                Port: Some(42424),
-                Namespace: None,
-            }),
-            Check: None,
-            SkipNodeUpdate: None,
-        };
-        consul
-            .register_entity(&payload)
-            .await
-            .expect("expected register_entity request to succeed");
-    }
-
-    async fn is_registered(consul: &Consul, service_name: &String) -> bool {
-        let ResponseMeta {
-            response: service_names_after_register,
-            ..
-        } = consul
-            .get_all_registered_service_names(None)
-            .await
-            .expect("expected get_registered_service_names request to succeed");
-        service_names_after_register.contains(service_name)
-    }
-
-    fn get_client() -> Consul {
-        let conf: Config = Config::from_env();
-        Consul::new(conf)
-    }
-
-    async fn create_or_update_key_value(
-        consul: &Consul,
-        key: &str,
-        value: &str,
-    ) -> Result<(bool, u64)> {
-        let req = CreateOrUpdateKeyRequest {
-            key,
-            ..Default::default()
-        };
-        consul
-            .create_or_update_key(req, value.as_bytes().to_vec())
-            .await
-    }
-
-    async fn read_key(consul: &Consul, key: &str) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
-        let req = ReadKeyRequest {
-            key,
-            ..Default::default()
-        };
-        consul.read_key(req).await
-    }
-
-    async fn delete_key(consul: &Consul, key: &str) -> Result<bool> {
-        let req = DeleteKeyRequest {
-            key,
-            ..Default::default()
-        };
-        consul.delete_key(req).await
-    }
-
-    fn assert_expected_result_with_index(res: Result<(bool, u64)>) {
-        assert!(res.is_ok());
-        let (result, _index) = res.unwrap();
-        assert!(result);
-    }
-
-    fn assert_expected_result(res: Result<bool>) {
-        assert!(res.is_ok());
-        assert!(res.unwrap());
-    }
-
-    async fn get_single_key_value_with_index(consul: &Consul, key: &str) -> (Option<String>, i64) {
-        let res = read_key(consul, key).await.expect("failed to read key");
-        let r = res.response.into_iter().next().unwrap();
-        (r.value, res.index as i64)
-    }
-
-    fn verify_single_value_matches(res: Result<ResponseMeta<Vec<ReadKeyResponse>>>, value: &str) {
-        assert!(res.is_ok());
-        assert_eq!(
-            res.unwrap()
-                .response
-                .into_iter()
-                .next()
-                .unwrap()
-                .value
-                .unwrap(),
-            value
-        )
     }
 }
