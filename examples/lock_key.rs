@@ -21,7 +21,7 @@ async fn main() {
         lock_delay: std::time::Duration::from_secs(1),
         ..Default::default()
     };
-    let res = consul.get_lock(req, key_value.as_bytes()).await.unwrap();
+    let _res = consul.get_lock(req, key_value.as_bytes()).await.unwrap();
     println!("Lock aquired for `locked-key`");
     sleep(Duration::from_secs(5)).await; // Aquire the lock for 5 seconds
     println!("Lock released");
