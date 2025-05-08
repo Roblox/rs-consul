@@ -472,7 +472,7 @@ pub struct ACLToken {
     /// Description
     pub description: String,
     /// Policies
-    pub policies: Vec<ACLTokenPolicyLink>,
+    pub policies: Option<Vec<ACLTokenPolicyLink>>,
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,

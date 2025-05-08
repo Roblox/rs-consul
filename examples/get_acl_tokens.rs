@@ -4,7 +4,7 @@ use rs_consul::{Config, Consul};
 async fn main() {
     let consul_config = Config {
         address: "http://localhost:8500".to_string(),
-        token: None, // Token is None in developpement mode
+        token: Some(String::from("8fc9e787-674f-0709-cfd5-bfdabd73a70d")), // use bootstraped token
         ..Default::default()
     };
     let consul = Consul::new(consul_config);
@@ -25,10 +25,11 @@ async fn main() {
             token
                 .policies
                 .iter()
-                .map(|p| format!("{} ({})", p.name, p.id))
+                .filter(|p| !p.is_empty())
+                .map(|p| format!(" ({:?})", p))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        println!("=========")
+        println!("\n=========\n")
     }
 }
