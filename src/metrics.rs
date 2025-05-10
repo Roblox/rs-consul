@@ -164,6 +164,10 @@ pub enum Function {
     GetSession,
     /// The list_acl_tokens function
     GetAclTokens,
+    /// The create_acl_policy function
+    CreateACLPolicy,
+    /// The list_acl_policies function
+    ListACLPolicies,
 }
 
 impl Function {
