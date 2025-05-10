@@ -476,18 +476,15 @@ pub struct ACLToken {
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,
-
-    ///
+    /// creation time
     pub create_time: String,
-
-    ///
+    /// hash
     pub hash: Option<String>,
-
-    ///
+    /// create index
     pub create_index: u64,
-
-    ///
-    pub modify_index: u64,
+    /// ModifyIndex is the last index that modified this key.
+    /// It can be used to establish blocking queries by setting the ?index query parameter.
+    pub modify_index: i64,
 }
 
 /// Information related to Policies
@@ -513,6 +510,40 @@ pub struct CreateACLTokenRequest {
     /// Local to datacenter
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local: Option<bool>,
+}
+
+/// Acl Policy
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ACLPolicy {
+    /// id
+    #[serde(rename = "ID")]
+    pub id: String,
+    /// name
+    pub name: String,
+    /// Description
+    pub description: String,
+    /// hash
+    pub hash: String,
+    /// Create index
+    pub create_index: u32,
+    /// Datacenters
+    pub datacenters: Option<String>,
+    /// modify index
+    pub modify_index: u32,
+}
+
+/// Payload to create an ACL Policy
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateACLPolicyRequest {
+    /// Name of the policy (unique)
+    pub name: String,
+    /// Description
+    pub description: String,
+    /// rules in HCL format
+    // todo: Make the rules strongly typed
+    pub rules: String,
 }
 
 pub(crate) fn serialize_duration_as_string<S>(
