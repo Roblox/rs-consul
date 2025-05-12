@@ -499,17 +499,38 @@ pub struct ACLTokenPolicyLink {
     pub name: String,
 }
 
-/// Payload to create an ACL token
-#[derive(Debug, Serialize)]
+/// Create ACL token payload
+/// See https://developer.hashicorp.com/consul/api-docs/acl/tokens for more information.
+/// todo(): NodeIdentities,TemplatedPolicies, ServiceIdentities
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-pub struct CreateACLTokenRequest {
-    /// Description
-    pub description: String,
-    /// Policies IDs/names
-    pub policies: Vec<String>,
-    /// Local to datacenter
+pub struct CreateACLTokenPayload {
+    /// Unique ID
+    #[serde(rename = "AccessorID")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub local: Option<bool>,
+    pub accessor_id: Option<String>,
+    /// Secret for authenticatioIDn
+    #[serde(rename = "SecretID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_id: Option<String>,
+    /// Description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Policies
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policies: Option<Vec<ACLTokenPolicyLink>>,
+    /// Token only valid in this datacenter
+    #[serde(default)]
+    pub local: bool,
+    /// creation time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub create_time: Option<String>,
+    /// hash
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    /// duration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_time: Option<Duration>,
 }
 
 /// Acl Policy
