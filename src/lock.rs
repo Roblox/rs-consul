@@ -2,8 +2,8 @@ use http_body_util::combinators::BoxBody;
 use hyper::body::Bytes;
 
 use crate::{
-    errors::ConsulError, Consul, CreateOrUpdateKeyRequest, LockRequest, LockWatchRequest,
-    ReadKeyRequest, ReadKeyResponse, ResponseMeta, Result,
+    Consul, CreateOrUpdateKeyRequest, LockRequest, LockWatchRequest, ReadKeyRequest,
+    ReadKeyResponse, ResponseMeta, Result, errors::ConsulError,
 };
 
 /// Represents a lock against Consul.
@@ -100,7 +100,7 @@ impl Consul {
     /// - request - the [LockWatchRequest](consul::types::LockWatchRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn watch_lock<'a>(
+    pub async fn watch_lock(
         &self,
         request: LockWatchRequest<'_>,
     ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {

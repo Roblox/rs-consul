@@ -1,4 +1,4 @@
-use crate::{types, QueryOptions};
+use crate::{QueryOptions, types};
 
 pub(crate) fn add_query_option_params(
     uri: &mut String,

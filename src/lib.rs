@@ -40,8 +40,8 @@ use base64::Engine;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
-use hyper::{body::Buf, Method};
-use hyper_util::client::legacy::{connect::HttpConnector, Builder, Client};
+use hyper::{Method, body::Buf};
+use hyper_util::client::legacy::{Builder, Client, connect::HttpConnector};
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
@@ -546,7 +546,8 @@ impl Consul {
             if sn.service.address.is_empty() {
                 info!(
                     "Consul service {service_name} instance had an empty Service address, with port:{port}",
-                    service_name = &sn.service.service, port = sn.service.port
+                    service_name = &sn.service.service,
+                    port = sn.service.port
                 );
                 sn.node.address
             } else {
@@ -637,7 +638,7 @@ impl Consul {
         req.uri(url)
     }
 
-    async fn execute_request<'a>(
+    async fn execute_request(
         &self,
         req: http::request::Builder,
         body: BoxBody<Bytes, Infallible>,

@@ -1,9 +1,9 @@
 [package]
 name = "rs-consul"
 # Don't forget to update the readme with the new version!
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Roblox"]
-edition = "2021"
+edition = "2024"
 description = "This crate provides access to a set of strongly typed apis to interact with consul (https://www.consul.io/)"
 readme = "README.md"
 repository = "https://github.com/Roblox/rs-consul"

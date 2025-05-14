@@ -23,9 +23,9 @@ SOFTWARE.
  */
 use hyper::Version;
 use opentelemetry::{
+    KeyValue,
     global::{BoxedSpan, BoxedTracer},
     trace::{Span, Status, Tracer},
-    KeyValue,
 };
 
 /// Create an OpenTelemetry Span for the given HTTP request, according to the OpenTelemetry

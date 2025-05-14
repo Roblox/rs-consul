@@ -62,7 +62,9 @@ pub enum ConsulError {
     TimeoutExceeded(std::time::Duration),
 
     /// Unable to resolve the service's instances in Consul.
-    #[error("Unable to resolve service '{0}' to a concrete list of addresses and ports for its instances via consul.")]
+    #[error(
+        "Unable to resolve service '{0}' to a concrete list of addresses and ports for its instances via consul."
+    )]
     ServiceInstanceResolutionFailed(String),
 
     /// An error from ureq occurred.

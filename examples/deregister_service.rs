@@ -1,4 +1,4 @@
-use rs_consul::{types::*, Config, Consul};
+use rs_consul::{Config, Consul, types::*};
 
 #[tokio::main] // Enables async main
 async fn main() {
