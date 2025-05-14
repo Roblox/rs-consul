@@ -637,7 +637,7 @@ impl Consul {
         req.uri(url)
     }
 
-    async fn execute_request<'a>(
+    async fn execute_request(
         &self,
         req: http::request::Builder,
         body: BoxBody<Bytes, Infallible>,

@@ -100,7 +100,7 @@ impl Consul {
     /// - request - the [LockWatchRequest](consul::types::LockWatchRequest)
     /// # Errors:
     /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
-    pub async fn watch_lock<'a>(
+    pub async fn watch_lock(
         &self,
         request: LockWatchRequest<'_>,
     ) -> Result<ResponseMeta<Vec<ReadKeyResponse>>> {
