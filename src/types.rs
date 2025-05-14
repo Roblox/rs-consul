@@ -313,6 +313,7 @@ pub struct RegisterEntityPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub Service: Option<RegisterEntityService>,
     /// Checks to register.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub Checks: Vec<RegisterEntityCheck>,
     /// Whether to skip updating the nodes information in the registration.
     #[serde(skip_serializing_if = "Option::is_none")]
