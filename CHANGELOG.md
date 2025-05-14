@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
-## 0.10.1 - 2025-05-13
+## 0.11.0 - 2025-05-13
 - Update Rust toolchain to 1.86
 - Update crate Rust edition support to Rust 2024.
 
