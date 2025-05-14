@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.10.0 - 2025-05-13
+- Supports registering multiple health checks. This breaks backward compatibility and drops supports to consul servers
+older than 0.5.0 that do not have this commit: [674be58e55f](https://github.com/hashicorp/consul/commit/674be58e55f3f2b1f1c64ef2f52bfbd577db0c7c)
+
 ## 0.9.0 - 2025-02-12
 
 - Upgrade `opentelemetry` to `0.28` from `0.27`.
