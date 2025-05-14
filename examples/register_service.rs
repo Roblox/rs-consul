@@ -27,7 +27,7 @@ async fn main() {
             Port: Some(42424),
             Namespace: None,
         }),
-        Check: None,
+        Checks: Vec::new(),
         SkipNodeUpdate: None,
     };
     consul.register_entity(&payload).await.unwrap();

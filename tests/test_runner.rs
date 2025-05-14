@@ -1,4 +1,5 @@
 use rs_consul::*;
+use std::collections::HashMap;
 
 #[path = "utils/test_setup.rs"]
 mod test_setup;
@@ -303,5 +304,36 @@ mod tests {
         let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
         assert_eq!(string_value4, &value.unwrap());
         assert_ne!(mod_idx3, mod_idx4);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_register_with_health_checks() {
+        let consul = get_client();
+
+        let new_service_name = "test-service-99".to_string();
+        let checks = [
+            RegisterEntityCheck {
+                Node: None,
+                CheckID: None,
+                Name: "Service Check".to_string(),
+                Notes: None,
+                Status: Some("passing".to_string()),
+                ServiceID: Some(service_id(&new_service_name)),
+                Definition: HashMap::new(),
+            },
+            RegisterEntityCheck {
+                Node: Some("local".to_string()),
+                CheckID: None,
+                Name: "Node check".to_string(),
+                Notes: None,
+                Status: Some("passing".to_string()),
+                ServiceID: None,
+                Definition: HashMap::new(),
+            },
+        ]
+        .to_vec();
+        register_entity_with_checks(&consul, &new_service_name, "local", checks).await;
+
+        assert!(is_registered(&consul, &new_service_name).await);
     }
 }
