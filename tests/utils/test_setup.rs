@@ -31,13 +31,57 @@ pub(crate) async fn register_entity(consul: &Consul, service_name: &String, node
             Port: Some(42424),
             Namespace: None,
         }),
-        Check: None,
+        Checks: Vec::new(),
         SkipNodeUpdate: None,
     };
     consul
         .register_entity(&payload)
         .await
         .expect("expected register_entity request to succeed");
+}
+
+pub(crate) async fn register_entity_with_checks(
+    consul: &Consul,
+    service_name: &String,
+    node_id: &str,
+    checks: Vec<RegisterEntityCheck>,
+) {
+    let ResponseMeta {
+        response: service_names_before_register,
+        ..
+    } = consul
+        .get_all_registered_service_names(None)
+        .await
+        .expect("expected get_registered_service_names request to succeed");
+    assert!(!service_names_before_register.contains(service_name));
+
+    let payload = RegisterEntityPayload {
+        ID: None,
+        Node: node_id.to_string(),
+        Address: "127.0.0.1".to_string(),
+        Datacenter: None,
+        TaggedAddresses: Default::default(),
+        NodeMeta: Default::default(),
+        Service: Some(RegisterEntityService {
+            ID: Some(service_id(service_name)),
+            Service: service_name.clone(),
+            Tags: vec![],
+            TaggedAddresses: Default::default(),
+            Meta: Default::default(),
+            Port: Some(42424),
+            Namespace: None,
+        }),
+        Checks: checks,
+        SkipNodeUpdate: None,
+    };
+    consul
+        .register_entity(&payload)
+        .await
+        .expect("expected register_entity request to succeed");
+}
+
+pub(crate) fn service_id(service_name: &str) -> String {
+    format!("{service_name}-ID")
 }
 
 pub(crate) async fn is_registered(consul: &Consul, service_name: &String) -> bool {
