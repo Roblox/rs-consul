@@ -2,8 +2,8 @@ use http_body_util::combinators::BoxBody;
 use hyper::body::Bytes;
 
 use crate::{
-    errors::ConsulError, Consul, CreateOrUpdateKeyRequest, LockRequest, LockWatchRequest,
-    ReadKeyRequest, ReadKeyResponse, ResponseMeta, Result,
+    Consul, CreateOrUpdateKeyRequest, LockRequest, LockWatchRequest, ReadKeyRequest,
+    ReadKeyResponse, ResponseMeta, Result, errors::ConsulError,
 };
 
 /// Represents a lock against Consul.

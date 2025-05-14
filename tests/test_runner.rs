@@ -102,9 +102,11 @@ mod tests {
             "2.2.2.2".to_string(),
             "3.3.3.3".to_string(),
         ];
-        assert!(expected_addresses
-            .iter()
-            .all(|item| addresses.contains(item)));
+        assert!(
+            expected_addresses
+                .iter()
+                .all(|item| addresses.contains(item))
+        );
 
         let tags: Vec<String> = response
             .iter()
