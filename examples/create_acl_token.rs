@@ -39,12 +39,12 @@ Token created successfully:
     create_time:{}
     hash: {}
 ",
-        result.accessor_id.unwrap_or_default(),
-        result.secret_id.unwrap_or_default(),
-        result.description.unwrap_or_default(),
-        result.policies.unwrap_or_default(),
+        result.accessor_id,
+        result.secret_id,
+        result.description,
+        result.policies,
         result.local,
-        result.create_time.unwrap_or_default(),
-        result.hash.unwrap_or_default(),
+        result.create_time,
+        result.hash,
     );
 }

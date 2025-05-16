@@ -479,7 +479,7 @@ pub struct ACLToken {
     /// creation time
     pub create_time: String,
     /// hash
-    pub hash: Option<String>,
+    pub hash: String,
     /// create index
     pub create_index: u64,
     /// ModifyIndex is the last index that modified this key.

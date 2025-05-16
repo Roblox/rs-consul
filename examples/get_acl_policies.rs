@@ -9,7 +9,7 @@ async fn main() {
         ..Default::default()
     };
     let consul = Consul::new(consul_config);
-    let acl_policies = consul.list_acl_policies().await.unwrap();
+    let acl_policies = consul.get_acl_policies().await.unwrap();
 
     println!("{} Policies found", acl_policies.len());
     for (i, policy) in acl_policies.iter().enumerate() {

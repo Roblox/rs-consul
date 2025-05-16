@@ -42,6 +42,17 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_acl_retrieve_tokens() {
+        let consul = get_privileged_client();
+        let result = consul.get_acl_tokens().await.unwrap();
+
+        assert!(result
+            .iter()
+            .any(|token| token.secret_id == "8fc9e787-674f-0709-cfd5-bfdabd73a70d"));
+        // initial managment token hardcoded in config.hcl
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_register_and_retrieve_services() {
         let consul = get_client();
 
