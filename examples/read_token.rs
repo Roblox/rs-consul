@@ -11,7 +11,7 @@ async fn main() {
     let consul = Consul::new(consul_config);
     // this is equivalent to consul/token/self
     let result = consul
-        .read_acl_token("8fc9e787-674f-0709-cfd5-bfdabd73a70d".to_owned())
+        .read_acl_token("dd72f645-4dc2-5b25-9a0b-70134ab5d1dc".to_owned())
         .await
         .unwrap();
     println!(
@@ -24,12 +24,12 @@ async fn main() {
             local: {}
             create_time:{}
         ",
-        result.accessor_id.unwrap_or_default(),
-        result.secret_id.unwrap_or_default(),
-        result.description.unwrap_or_default(),
-        result.policies.unwrap_or_default(),
+        result.accessor_id,
+        result.secret_id,
+        result.description,
+        result.policies,
         result.local,
-        result.create_time.unwrap_or_default(),
-        result.hash.unwrap_or_default(),
+        result.create_time,
+        result.hash,
     );
 }

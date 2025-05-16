@@ -9,7 +9,7 @@ async fn main() {
         ..Default::default()
     };
     let consul = Consul::new(consul_config);
-    let acl_tokens = consul.list_acl_tokens().await.unwrap();
+    let acl_tokens = consul.get_acl_tokens().await.unwrap();
 
     println!("{} Tokens found", acl_tokens.len());
     for (i, token) in acl_tokens.iter().enumerate() {
