@@ -129,12 +129,12 @@ impl Consul {
     ///
     /// # Arguments:
     /// - `&self` – the `Consul` client instance.  
-    /// - `token` – the token ID to read.
+    /// - `accessor_id` – the accessor_id to read.
     ///
     /// # Errors:
     /// - [`ConsulError::ResponseDeserializationFailed`] if the response JSON can’t be parsed.
-    pub async fn read_acl_token(&self, token: String) -> Result<ACLToken> {
-        let uri = format!("{}/v1/acl/token/{}", self.config.address, token);
+    pub async fn read_acl_token(&self, accessor_id: String) -> Result<ACLToken> {
+        let uri = format!("{}/v1/acl/token/{}", self.config.address, accessor_id);
         let request = hyper::Request::builder().method(Method::GET).uri(uri);
         let (resp_body, _) = self
             .execute_request(

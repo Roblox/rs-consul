@@ -6,11 +6,12 @@ pub(crate) fn get_client() -> Consul {
     Consul::new(conf)
 }
 
+/// a consul client with write permission allows for manipulating tokens
 pub(crate) fn get_privileged_client() -> Consul {
     let conf: Config = Config {
         address: "http://localhost:8500".to_string(),
-        token: Some(String::from("8fc9e787-674f-0709-cfd5-bfdabd73a70d")), // use bootstraped
-        // token (with write perm)
+        token: Some(String::from("8fc9e787-674f-0709-cfd5-bfdabd73a70d")), // use initial-managment
+        // token hardcoded in config.hcl
         ..Default::default()
     };
     Consul::new(conf)
