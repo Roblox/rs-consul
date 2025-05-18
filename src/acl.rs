@@ -1,19 +1,22 @@
 use std::time::Duration;
 
 use crate::errors::ConsulError;
-use crate::types::ACLPolicy;
-use crate::types::ACLToken;
-use crate::types::CreateACLPolicyRequest;
+use crate::ACLPolicy;
+use crate::ACLToken;
 use crate::Consul;
+use crate::CreateACLPolicyRequest;
 use crate::CreateACLTokenPayload;
 use crate::Function;
 use crate::Result;
+
 use http::Method;
 use http_body_util::combinators::BoxBody;
 use http_body_util::Empty;
 use http_body_util::Full;
+
 use hyper::body::Buf;
 use hyper::body::Bytes;
+
 impl Consul {
     /// Returns all ACL tokens.
     ///

@@ -73,6 +73,13 @@ pub use types::*;
 #[cfg(feature = "acl")]
 /// Access Control List(acl) to control authentication and authorization
 pub mod acl;
+
+#[cfg(feature = "acl")]
+/// Types for acl related operations
+pub mod acl_types;
+#[cfg(feature = "acl")]
+pub use acl_types::*;
+
 /// Consul errors and Result type
 mod errors;
 #[cfg(feature = "trace")]

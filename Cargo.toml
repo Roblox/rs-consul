@@ -64,10 +64,10 @@ required-features = ["acl"]
 
 [[example]]
 name = "get_acl_tokens"
-path = "examples/get_acl_policies.rs"
+path = "examples/get_acl_tokens.rs"
 required-features = ["acl"]
 
 [[example]]
 name = "read_token"
-path = "examples/get_acl_policies.rs"
+path = "examples/read_token.rs"
 required-features = ["acl"]
