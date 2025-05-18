@@ -174,6 +174,8 @@ pub enum Function {
     DeleteACLToken,
     /// The read_acl_token function
     ReadACLToken,
+    /// The delete_acl_policy function
+    DeleteACLPolicy,
 }
 
 impl Function {
@@ -195,6 +197,7 @@ impl Function {
             Function::ReadACLPolicies => "read_acl_policies",
             Function::DeleteACLToken => "delete_acl_token",
             Function::ReadACLToken => "read_acl_token",
+            Function::DeleteACLPolicy => "delete_acl_policy",
         }
     }
 }

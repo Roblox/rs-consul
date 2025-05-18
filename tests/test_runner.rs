@@ -7,6 +7,7 @@ use test_setup::*;
 
 pub use types::*;
 
+#[cfg(feature = "acl")]
 mod acl_tests {
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
@@ -68,26 +69,29 @@ mod acl_tests {
                 && policy.id == "00000000-0000-0000-0000-000000000001"));
     }
 }
+
+#[cfg(feature = "acl")]
 mod smoke_acl {
 
     use super::*;
 
     #[tokio::test]
     async fn smoke_test_token_policy_retrieval() {
+        // get an instance of a privileged acl client
         let consul = get_privileged_client();
+
         // Create a policy
         let policy_payload = CreateACLPolicyRequest {
             name: "smoke_test_policy_1".to_owned(),
             ..Default::default()
         };
-        consul.create_acl_policy(&policy_payload).await.unwrap();
+        let policy_result = consul.create_acl_policy(&policy_payload).await.unwrap();
 
+        // Create a token with the newly created policy
         let policy_link_vec = vec![ACLTokenPolicyLink {
             name: Some("smoke_test_policy_1".to_owned()),
             ..Default::default()
         }];
-
-        // Create a token with the newly created policy
         let token_payload = CreateACLTokenPayload {
             description: Some("Smmoke test".to_owned()),
             secret_id: Some("00000000-9494-1111-1111-222222222229".to_owned()),
@@ -110,11 +114,15 @@ mod smoke_acl {
         assert!(result.secret_id == "00000000-9494-1111-1111-222222222229".to_owned());
 
         // delete the created token
-        let delete_result = consul
+        let token_delete_result = consul
             .delete_acl_token("00000000-9494-1111-1111-222222222229".to_owned())
             .await
             .unwrap();
-        assert_eq!(delete_result, ());
+        let policy_delete_result = consul.delete_acl_policy(policy_result.id).await.unwrap();
+
+        // delete the policy
+        assert_eq!(token_delete_result, ());
+        assert_eq!(policy_delete_result, ());
     }
 }
 

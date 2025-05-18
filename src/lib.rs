@@ -70,6 +70,7 @@ pub use metrics::MetricInfo;
 pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
+#[cfg(feature = "acl")]
 /// Access Control List(acl) to control authentication and authorization
 pub mod acl;
 /// Consul errors and Result type
@@ -130,7 +131,6 @@ impl Config {
         }
     }
 }
-
 /// Type alias for a Hyper client using a hyper_rusttls HttpsConnector
 pub type HttpsClient =
     Client<hyper_rustls::HttpsConnector<HttpConnector>, BoxBody<Bytes, Infallible>>;

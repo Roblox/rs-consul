@@ -14,7 +14,6 @@ use http_body_util::Empty;
 use http_body_util::Full;
 use hyper::body::Buf;
 use hyper::body::Bytes;
-
 impl Consul {
     /// Returns all ACL tokens.
     ///
@@ -66,6 +65,30 @@ impl Consul {
         serde_json::from_reader(body.reader()).map_err(ConsulError::ResponseDeserializationFailed)
     }
 
+    /// Delete an acl policy.
+    ///
+    /// Sends a `DELETE` to `/v1/acl/policy/:id` to delete an ACL policy in Consul.
+    ///
+    /// # Arguments:
+    /// - `&self` – the `Consul` client instance.  
+    /// - `id` – the policy ID.
+    ///
+    /// # Errors:
+    /// - [`ConsulError::InvalidRequest`] if the payload fails to serialize.  
+    /// - [`ConsulError::ResponseDeserializationFailed`] if the Consul response can’t be parsed.
+    pub async fn delete_acl_policy(&self, id: String) -> Result<()> {
+        let uri = format!("{}/v1/acl/policy/{}", self.config.address, id);
+        let request = hyper::Request::builder().method(Method::DELETE).uri(uri);
+        self.execute_request(
+            request,
+            BoxBody::new(Empty::<Bytes>::new()),
+            Some(Duration::from_secs(5)),
+            Function::DeleteACLPolicy,
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Creates a new ACL policy.
     ///
     /// Sends a `PUT` to `/v1/acl/policy` to define a new ACL policy in Consul.
@@ -79,20 +102,20 @@ impl Consul {
     /// # Errors:
     /// - [`ConsulError::InvalidRequest`] if the payload fails to serialize.  
     /// - [`ConsulError::ResponseDeserializationFailed`] if the Consul response can’t be parsed.
-    pub async fn create_acl_policy(&self, payload: &CreateACLPolicyRequest) -> Result<()> {
+    pub async fn create_acl_policy(&self, payload: &CreateACLPolicyRequest) -> Result<ACLPolicy> {
         let uri = format!("{}/v1/acl/policy", self.config.address);
         let request = hyper::Request::builder().method(Method::PUT).uri(uri);
         let payload = serde_json::to_string(payload).map_err(ConsulError::InvalidRequest)?;
-        self.execute_request(
-            request,
-            BoxBody::new(Full::<Bytes>::new(Bytes::from(payload.into_bytes()))),
-            Some(Duration::from_secs(5)),
-            Function::CreateACLPolicy,
-        )
-        .await?;
-        Ok(())
+        let (resp, _) = self
+            .execute_request(
+                request,
+                BoxBody::new(Full::<Bytes>::new(Bytes::from(payload.into_bytes()))),
+                Some(Duration::from_secs(5)),
+                Function::CreateACLPolicy,
+            )
+            .await?;
+        serde_json::from_reader(resp.reader()).map_err(ConsulError::ResponseDeserializationFailed)
     }
-
     /// Creates a new ACL token.
     ///
     /// Sends a `PUT` to `/v1/acl/token` to generate a new token which can be attached to ACL policies.
