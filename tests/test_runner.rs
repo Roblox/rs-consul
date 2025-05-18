@@ -68,6 +68,55 @@ mod acl_tests {
                 && policy.id == "00000000-0000-0000-0000-000000000001"));
     }
 }
+mod smoke_acl {
+
+    use super::*;
+
+    #[tokio::test]
+    async fn smoke_test_token_policy_retrieval() {
+        let consul = get_privileged_client();
+        // Create a policy
+        let policy_payload = CreateACLPolicyRequest {
+            name: "smoke_test_policy_1".to_owned(),
+            ..Default::default()
+        };
+        consul.create_acl_policy(&policy_payload).await.unwrap();
+
+        let policy_link_vec = vec![ACLTokenPolicyLink {
+            name: Some("smoke_test_policy_1".to_owned()),
+            ..Default::default()
+        }];
+
+        // Create a token with the newly created policy
+        let token_payload = CreateACLTokenPayload {
+            description: Some("Smmoke test".to_owned()),
+            secret_id: Some("00000000-9494-1111-1111-222222222229".to_owned()),
+            accessor_id: Some("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned()),
+            policies: Some(policy_link_vec),
+            ..Default::default()
+        };
+        let _ = consul.create_acl_token(&token_payload).await.unwrap();
+
+        // read the newly created token
+        let result = consul
+            .read_acl_token("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned())
+            .await
+            .unwrap();
+        assert!(
+            result.policies.unwrap().first().unwrap().name
+                == Some("smoke_test_policy_1".to_owned())
+        );
+
+        assert!(result.secret_id == "00000000-9494-1111-1111-222222222229".to_owned());
+
+        // delete the created token
+        let delete_result = consul
+            .delete_acl_token("00000000-9494-1111-1111-222222222229".to_owned())
+            .await
+            .unwrap();
+        assert_eq!(delete_result, ());
+    }
+}
 
 mod tests {
     use std::time::Duration;

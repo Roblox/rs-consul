@@ -489,14 +489,14 @@ pub struct ACLToken {
 
 /// Information related to Policies
 /// see https://developer.hashicorp.com/consul/docs/security/acl/acl-policies for more information
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct ACLTokenPolicyLink {
     /// Policy ID
     #[serde(rename = "ID")]
-    pub id: String,
+    pub id: Option<String>,
     /// Policy name
-    pub name: String,
+    pub name: Option<String>,
 }
 
 /// Create ACL token payload
@@ -555,16 +555,16 @@ pub struct ACLPolicy {
 }
 
 /// Payload to create an ACL Policy
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct CreateACLPolicyRequest {
     /// Name of the policy (unique)
     pub name: String,
     /// Description
-    pub description: String,
+    pub description: Option<String>,
     /// rules in HCL format
     // todo: Make the rules strongly typed
-    pub rules: String,
+    pub rules: Option<String>,
 }
 
 pub(crate) fn serialize_duration_as_string<S>(

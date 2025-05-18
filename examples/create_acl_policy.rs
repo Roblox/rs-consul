@@ -11,8 +11,8 @@ async fn main() {
     let consul = Consul::new(consul_config);
     let policy_payload = CreateACLPolicyRequest {
         name: "dev-policy-test-1".to_owned(),
-        description: "this is not a test policy".to_owned(),
-        rules: "".to_owned(),
+        description: Some("this is not a test policy".to_owned()),
+        rules: Some("".to_owned()),
     };
     consul.create_acl_policy(&policy_payload).await.unwrap();
 }
