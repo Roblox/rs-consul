@@ -16,9 +16,11 @@ mod acl_tests {
         let result = consul.get_acl_tokens().await.unwrap();
 
         // test against the initial managment token hardcoded in config.hcl
-        assert!(result
-            .iter()
-            .any(|token| token.secret_id == "8fc9e787-674f-0709-cfd5-bfdabd73a70d"));
+        assert!(
+            result
+                .iter()
+                .any(|token| token.secret_id == "8fc9e787-674f-0709-cfd5-bfdabd73a70d")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -27,12 +29,12 @@ mod acl_tests {
 
         let token_payload = CreateACLTokenPayload {
             description: Some("Test token".to_owned()),
-            secret_id: Some("00000000-0000-1111-1111-222222222223".to_owned()),
+            secret_id: Some("00000000-2223-1111-1111-222222222223".to_owned()),
             ..Default::default()
         };
         let result = consul.create_acl_token(&token_payload).await.unwrap();
 
-        assert!(result.secret_id == "00000000-0000-1111-1111-222222222223");
+        assert!(result.secret_id == "00000000-2223-1111-1111-222222222223");
         assert!(result.description == "Test token");
     }
 
@@ -40,21 +42,21 @@ mod acl_tests {
     async fn test_read_token() {
         let consul = get_privileged_client();
 
-        // create and token with a specigic accessor_id for testing
+        // create a token with a specific accessor_id for testing
         let token_payload = CreateACLTokenPayload {
             description: Some("Token created in acl_tests::test_read_token".to_owned()),
-            secret_id: Some("00000000-9494-1111-1111-222222222229".to_owned()),
-            accessor_id: Some("8d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned()),
+            secret_id: Some("20000000-9494-1111-1111-222222222229".to_owned()),
+            accessor_id: Some("1d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned()),
             ..Default::default()
         };
         let _ = consul.create_acl_token(&token_payload).await.unwrap();
         // now read the token by the accessor_id
         let result = consul
-            .read_acl_token("8d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned())
+            .read_acl_token("1d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned())
             .await
             .unwrap();
 
-        assert!(result.secret_id == "00000000-9494-1111-1111-222222222229");
+        assert!(result.secret_id == "20000000-9494-1111-1111-222222222229");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -63,10 +65,12 @@ mod acl_tests {
 
         let result = consul.get_acl_policies().await.unwrap();
 
-        assert!(result
-            .iter()
-            .any(|policy| policy.name == "global-management"
-                && policy.id == "00000000-0000-0000-0000-000000000001"));
+        assert!(
+            result
+                .iter()
+                .any(|policy| policy.name == "global-management"
+                    && policy.id == "00000000-0000-0000-0000-000000000001")
+        );
     }
 }
 
