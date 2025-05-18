@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rs_consul::{types::*, Config, Consul};
+use rs_consul::{Config, Consul, types::*};
 use tokio::time::sleep;
 
 #[tokio::main] // Enables async main
