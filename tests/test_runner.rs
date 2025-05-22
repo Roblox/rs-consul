@@ -100,7 +100,7 @@ mod smoke_acl {
             description: Some("Smmoke test".to_owned()),
             secret_id: Some("00000000-9494-1111-1111-222222222229".to_owned()),
             accessor_id: Some("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned()),
-            policies: Some(policy_link_vec),
+            policies: policy_link_vec,
             ..Default::default()
         };
         let _ = consul.create_acl_token(&token_payload).await.unwrap();
@@ -110,10 +110,7 @@ mod smoke_acl {
             .read_acl_token("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned())
             .await
             .unwrap();
-        assert!(
-            result.policies.unwrap().first().unwrap().name
-                == Some("smoke_test_policy_1".to_owned())
-        );
+        assert!(result.policies.first().unwrap().name == Some("smoke_test_policy_1".to_owned()));
 
         assert!(result.secret_id == "00000000-9494-1111-1111-222222222229".to_owned());
 

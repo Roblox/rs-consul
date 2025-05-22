@@ -26,7 +26,6 @@ async fn main() {
             token
                 .policies
                 .iter()
-                .filter(|p| !p.is_empty())
                 .map(|p| format!(" ({:?})", p))
                 .collect::<Vec<_>>()
                 .join(", ")

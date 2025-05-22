@@ -119,6 +119,7 @@ impl Consul {
             .await?;
         serde_json::from_reader(resp.reader()).map_err(ConsulError::ResponseDeserializationFailed)
     }
+
     /// Creates a new ACL token.
     ///
     /// Sends a `PUT` to `/v1/acl/token` to generate a new token which can be attached to ACL policies.

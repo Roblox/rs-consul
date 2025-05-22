@@ -16,7 +16,8 @@ pub struct ACLToken {
     /// Description
     pub description: String,
     /// Policies
-    pub policies: Option<Vec<ACLTokenPolicyLink>>,
+    #[serde(default)]
+    pub policies: Vec<ACLTokenPolicyLink>,
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,
@@ -61,8 +62,8 @@ pub struct CreateACLTokenPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Policies
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub policies: Option<Vec<ACLTokenPolicyLink>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub policies: Vec<ACLTokenPolicyLink>,
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,
@@ -77,24 +78,26 @@ pub struct CreateACLTokenPayload {
     pub expiration_time: Option<Duration>,
 }
 
-/// Acl Policy
+/// Represents an ACL (Access Control List) policy.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ACLPolicy {
-    /// id
+    /// Unique identifier for the policy.
     #[serde(rename = "ID")]
     pub id: String,
-    /// name
+    /// The name of the policy
     pub name: String,
-    /// Description
+    /// Description of the policy.
     pub description: String,
-    /// hash
+    /// Hash of the policy.
     pub hash: String,
-    /// Create index
+    /// Index at which the policy was created.
     pub create_index: u32,
-    /// Datacenters
-    pub datacenters: Option<String>,
-    /// modify index
+    // `datacenters` is Option::Vec because when `datacenters` is set to `null` we would need
+    // to define a custom deserializer in case we had `Vec` directly
+    /// List of applicable datacenters.
+    pub datacenters: Option<Vec<String>>,
+    /// Index at which the policy was last modified.
     pub modify_index: u32,
 }
 
