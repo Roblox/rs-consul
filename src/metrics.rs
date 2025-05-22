@@ -162,6 +162,20 @@ pub enum Function {
     GetAllRegisteredServices,
     /// The get_session function.
     GetSession,
+    /// The list_acl_tokens function
+    GetAclTokens,
+    /// The create_acl_policy function
+    CreateACLPolicy,
+    /// The list_acl_policies function
+    GetACLPolicies,
+    /// The read_acl_token function
+    ReadACLPolicies,
+    /// The delete_acl_token function
+    DeleteACLToken,
+    /// The read_acl_token function
+    ReadACLToken,
+    /// The delete_acl_policy function
+    DeleteACLPolicy,
 }
 
 impl Function {
@@ -177,6 +191,13 @@ impl Function {
             Function::GetServiceNodes => "get_service_nodes",
             Function::GetAllRegisteredServices => "get_all_registered_services",
             Function::GetSession => "get_session",
+            Function::GetAclTokens => "list_acl_tokens",
+            Function::CreateACLPolicy => "create_acl_policy",
+            Function::GetACLPolicies => "get_acl_policies",
+            Function::ReadACLPolicies => "read_acl_policies",
+            Function::DeleteACLToken => "delete_acl_token",
+            Function::ReadACLToken => "read_acl_token",
+            Function::DeleteACLPolicy => "delete_acl_policy",
         }
     }
 }
