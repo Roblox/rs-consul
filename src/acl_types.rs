@@ -10,7 +10,7 @@ pub struct ACLToken {
     /// Unique ID
     #[serde(rename = "AccessorID")]
     pub accessor_id: String,
-    /// Secret for authenticatioIDn
+    /// Secret for authentication
     #[serde(rename = "SecretID")]
     pub secret_id: String,
     /// Description
@@ -21,11 +21,11 @@ pub struct ACLToken {
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,
-    /// creation time
+    /// Creation time
     pub create_time: String,
-    /// hash
+    /// Hash
     pub hash: String,
-    /// create index
+    /// Create index
     pub create_index: u64,
     /// ModifyIndex is the last index that modified this key.
     /// It can be used to establish blocking queries by setting the ?index query parameter.
