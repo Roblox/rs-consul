@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use serde::{self, Deserialize, Serialize};
 
 /// Information related ACL token.
@@ -46,7 +44,7 @@ pub struct ACLTokenPolicyLink {
 
 /// Create ACL token payload
 /// See https://developer.hashicorp.com/consul/api-docs/acl/tokens for more information.
-/// todo(): NodeIdentities,TemplatedPolicies, ServiceIdentities
+/// TODO: NodeIdentities,TemplatedPolicies, ServiceIdentities
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct CreateACLTokenPayload {
@@ -54,7 +52,7 @@ pub struct CreateACLTokenPayload {
     #[serde(rename = "AccessorID")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accessor_id: Option<String>,
-    /// Secret for authenticatioIDn
+    /// Secret for authentication
     #[serde(rename = "SecretID")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secret_id: Option<String>,
@@ -67,15 +65,26 @@ pub struct CreateACLTokenPayload {
     /// Token only valid in this datacenter
     #[serde(default)]
     pub local: bool,
-    /// creation time
+    /// Creation time
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<String>,
-    /// hash
+    /// Hash
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,
-    /// duration
+    /// Optional expiration time for the ACL token.
+    ///
+    /// If set, this field specifies the point in time after which the token is considered revoked and eligible for destruction.
+    /// The default value means the token does not expire.
+    ///
+    /// The expiration time must be between 1 minute and 24 hours in the future. This constraint is enforced by Consul to promote
+    /// security best practices, ensuring that tokens are short-lived and reducing the risk of unauthorized access in case of token compromise.
+    ///
+    /// The value should be provided in RFC 3339 format, representing a date and time with optional fractional seconds and time zone offset.
+    /// For example: "2025-05-29T15:00:00Z" or "2025-05-29T15:00:00+02:00".
+    ///
+    /// Added in Consul 1.5.0.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub expiration_time: Option<Duration>,
+    pub expiration_time: Option<String>,
 }
 
 /// Represents an ACL (Access Control List) policy.
@@ -93,8 +102,9 @@ pub struct ACLPolicy {
     pub hash: String,
     /// Index at which the policy was created.
     pub create_index: u32,
-    // `datacenters` is Option::Vec because when `datacenters` is set to `null` we would need
-    // to define a custom deserializer in case we had `Vec` directly
+    // `datacenters` is an Option::Vec because Consul may return `null` for this field.
+    // Using `Option` avoids the need for a custom deserializer that would be required
+    // if the field was just a `Vec`.
     /// List of applicable datacenters.
     pub datacenters: Option<Vec<String>>,
     /// Index at which the policy was last modified.
@@ -109,7 +119,7 @@ pub struct CreateACLPolicyRequest {
     pub name: String,
     /// Description
     pub description: Option<String>,
-    /// rules in HCL format
-    // todo: Make the rules strongly typed
+    /// Rules in HCL format
+    // TODO: Make the rules strongly typed
     pub rules: Option<String>,
 }
