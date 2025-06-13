@@ -6,11 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.12.0 - 2025-06-13
+
+### Changed
+
+- `opentelemetry` upgraded to version `0.30` from `0.28`.
+
 ## 0.11.0 - 2025-05-13
-- Update Rust toolchain to 1.86
+
+- Update Rust toolchain to 1.87
 - Update crate Rust edition support to Rust 2024.
 
 ## 0.10.0 - 2025-05-13
+
 - Supports registering multiple health checks. This breaks backward compatibility and drops supports to consul servers
 older than 0.5.0 that do not have this commit: [674be58e55f](https://github.com/hashicorp/consul/commit/674be58e55f3f2b1f1c64ef2f52bfbd577db0c7c)
 
