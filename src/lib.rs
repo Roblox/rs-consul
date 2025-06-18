@@ -40,8 +40,8 @@ use base64::Engine;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
-use hyper::{Method, body::Buf};
-use hyper_util::client::legacy::{Builder, Client, connect::HttpConnector};
+use hyper::{body::Buf, Method};
+use hyper_util::client::legacy::{connect::HttpConnector, Builder, Client};
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::time::timeout;
@@ -664,7 +664,6 @@ impl Consul {
     }
 
     // We assign to added_query_param for future proofing in case we add more parameters.
-    #[allow(unused_assignments)]
     fn build_get_nodes_req(
         &self,
         request: GetNodesRequest<'_>,
@@ -688,7 +687,6 @@ impl Consul {
             if !dc.is_empty() {
                 url = utils::add_query_param_separator(url, added_query_param);
                 url.push_str(&format!("dc={}", dc));
-                added_query_param = true;
             }
         }
 
