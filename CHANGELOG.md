@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.12.1 - 2025-06-18
+
+### Changed
+
+- Exposed Consul List-Nodes API.
+
 ## 0.12.0 - 2025-06-13
 
 ### Changed
