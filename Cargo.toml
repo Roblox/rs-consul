@@ -12,7 +12,6 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = []
-acl = []
 metrics = []
 trace = ["dep:opentelemetry"]
 
@@ -36,38 +35,3 @@ ureq = { version = "3", features = ["json"] }
 [dev-dependencies]
 tokio-test = "0.4"  # Explicitly add if missing
 
-# The following examples are require `acl` feature 
-[[example]]
-name = "create_acl_policy"
-path = "examples/create_acl_policy.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "create_acl_token"
-path = "examples/create_acl_token.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "delete_acl_token"
-path = "examples/delete_acl_token.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "deregister_service"
-path = "examples/deregister_service.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "get_acl_policies"
-path = "examples/get_acl_policies.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "get_acl_tokens"
-path = "examples/get_acl_tokens.rs"
-required-features = ["acl"]
-
-[[example]]
-name = "read_token"
-path = "examples/read_token.rs"
-required-features = ["acl"]

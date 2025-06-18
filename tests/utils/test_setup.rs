@@ -5,8 +5,6 @@ pub(crate) fn get_client() -> Consul {
     let conf: Config = Config::from_env();
     Consul::new(conf)
 }
-// Feature-gated to avoid dead code warnings;
-#[cfg(feature = "acl")]
 /// a consul client with write permission allows for manipulating tokens
 pub(crate) fn get_privileged_client() -> Consul {
     use std::env;

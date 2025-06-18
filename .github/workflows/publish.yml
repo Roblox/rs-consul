@@ -18,12 +18,12 @@ jobs:
       CONSUL_HTTP_ADDR: http://consul:8500
     strategy:
       matrix:
-        features: ["", "acl"]
+        features: [""]
     steps:
       - uses: actions/checkout@v2
 
       - name: Tests
-        run: cargo test --features "${{ matrix.features }}"
+        run: cargo test "${{ matrix.features }}"
 
   dry-run:
     runs-on: ubuntu-latest

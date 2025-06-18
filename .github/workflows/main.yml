@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        features: ["", "acl"]
+        features: [""]
     runs-on: "ubuntu-latest"
     container: rust:1.86
 
@@ -19,12 +19,12 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Build
-        run: cargo build --features "${{ matrix.features }}"
+        run: cargo build "${{ matrix.features }}"
 
   test:
     strategy:
       matrix:
-        features: ["", "acl"]
+        features: [""]
     runs-on: "ubuntu-latest"
     container: rust:1.86
     services:
@@ -42,4 +42,4 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Test
-        run: cargo test --features "${{ matrix.features }}"
+        run: cargo test "${{ matrix.features }}"

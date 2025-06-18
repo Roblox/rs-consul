@@ -7,7 +7,6 @@ use test_setup::*;
 
 pub use types::*;
 
-#[cfg(feature = "acl")]
 mod acl_tests {
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
@@ -74,7 +73,6 @@ mod acl_tests {
     }
 }
 
-#[cfg(feature = "acl")]
 mod smoke_acl {
 
     use super::*;
