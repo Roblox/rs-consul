@@ -10,6 +10,8 @@ pub use types::*;
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
+    use std::time::SystemTime;
+    use std::time::UNIX_EPOCH;
 
     use rs_consul::ConsulError;
     use tokio::time::sleep;
@@ -46,9 +48,11 @@ mod tests {
         let consul = get_client();
 
         let new_service_name = "test-service-44".to_string();
-        register_entity(&consul, &new_service_name, "local").await;
+        let node_id = format!("{new_service_name}-node");
+        register_entity(&consul, &new_service_name, &node_id).await;
 
         assert!(is_registered(&consul, &new_service_name).await);
+        remove_service_node(&consul, node_id, Some(new_service_name)).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -124,6 +128,104 @@ mod tests {
             .iter()
             .map(|sn| assert_eq!("dc1", sn.node.datacenter))
             .collect();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn get_nodes() {
+        let consul = get_client();
+        let ts: Duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        let service_name = format!("get-nodes-test-{}", ts.as_millis());
+        let base_node_name = format!("{service_name}-node");
+        register_entity_with_address(
+            &consul,
+            &service_name,
+            &format!("{base_node_name}-0"),
+            "127.0.0.1",
+        )
+        .await;
+        register_entity_with_address(
+            &consul,
+            &service_name,
+            &format!("{base_node_name}-1"),
+            "127.0.0.2",
+        )
+        .await;
+        register_entity_with_address(
+            &consul,
+            &service_name,
+            &format!("{base_node_name}-2"),
+            "127.0.0.1",
+        )
+        .await;
+
+        let req = GetNodesRequest {
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_nodes(req, None).await.unwrap();
+        // We have the default node, maybe some nodes from other tests  and the 3 nodes we added with registration.
+        assert!(response.len() > 3, "Nodes: {response:?}");
+        let filter = format!("Node+contains+%22{base_node_name}%22");
+        let req = GetNodesRequest {
+            filter: Some(&filter),
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_nodes(req, None).await.unwrap();
+        // Only our nodes should be there.
+        assert_eq!(response.len(), 3);
+
+        let _: Vec<_> = response
+            .iter()
+            .map(|cn| assert_eq!("dc1", cn.datacenter))
+            .collect();
+        let filter = format!("Meta+contains+%22meta-key-1%22");
+        let req = GetNodesRequest {
+            filter: Some(&filter),
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_nodes(req, None).await.unwrap();
+        // Only our nodes should be there.
+        assert_eq!(response.len(), 3);
+        // Unregister the service on these nodes
+        deregister_entity(
+            &consul,
+            format!("{base_node_name}-0"),
+            Some(service_name.to_string()),
+        )
+        .await;
+        deregister_entity(
+            &consul,
+            format!("{base_node_name}-1"),
+            Some(service_name.to_string()),
+        )
+        .await;
+        deregister_entity(
+            &consul,
+            format!("{base_node_name}-2"),
+            Some(service_name.to_string()),
+        )
+        .await;
+        // The nodes should still exist, even without services:
+        let filter = format!("Meta+contains+%22meta-key-1%22");
+        let req = GetNodesRequest {
+            filter: Some(&filter),
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_nodes(req, None).await.unwrap();
+        // Only our nodes should be there.
+        assert_eq!(response.len(), 3);
+        deregister_entity(&consul, format!("{base_node_name}-0"), None).await;
+        deregister_entity(&consul, format!("{base_node_name}-1"), None).await;
+        deregister_entity(&consul, format!("{base_node_name}-2"), None).await;
+        let filter = format!("Node+contains+%22{base_node_name}%22");
+        let req = GetNodesRequest {
+            filter: Some(&filter),
+            ..Default::default()
+        };
+        let ResponseMeta { response, .. } = consul.get_nodes(req, None).await.unwrap();
+        // The nodes should be gone, and we should only have the default node.
+        assert_eq!(response.len(), 0, "Nodes: {response:?}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -306,6 +408,19 @@ mod tests {
         let (value, mod_idx4) = get_single_key_value_with_index(&consul, key).await;
         assert_eq!(string_value4, &value.unwrap());
         assert_ne!(mod_idx3, mod_idx4);
+
+        let delete_request = DeleteKeyRequest {
+            key,
+            check_and_set: 0,
+            ..Default::default()
+        };
+        assert!(
+            consul
+                .delete_key(delete_request)
+                .await
+                .expect("failed to delete key"),
+            "Key should have been deleted"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -313,6 +428,7 @@ mod tests {
         let consul = get_client();
 
         let new_service_name = "test-service-99".to_string();
+        let node_id = format!("{new_service_name}-node");
         let checks = [
             RegisterEntityCheck {
                 Node: None,
@@ -324,7 +440,7 @@ mod tests {
                 Definition: HashMap::new(),
             },
             RegisterEntityCheck {
-                Node: Some("local".to_string()),
+                Node: Some(node_id.clone()),
                 CheckID: None,
                 Name: "Node check".to_string(),
                 Notes: None,
@@ -334,8 +450,9 @@ mod tests {
             },
         ]
         .to_vec();
-        register_entity_with_checks(&consul, &new_service_name, "local", checks).await;
+        register_entity_with_checks(&consul, &new_service_name, &node_id, checks).await;
 
         assert!(is_registered(&consul, &new_service_name).await);
+        remove_service_node(&consul, node_id, Some(new_service_name)).await;
     }
 }

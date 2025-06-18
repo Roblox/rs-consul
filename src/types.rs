@@ -398,6 +398,43 @@ pub struct RegisterEntityCheck {
 }
 
 /// Request for the nodes providing a specified service registered in Consul.
+/// See https://developer.hashicorp.com/consul/api-docs/catalog#list-nodes for more information.
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+pub struct GetNodesRequest<'a> {
+    /// Specifies a node name to sort the node list in ascending order based on the estimated round trip time from that node.
+    /// Passing `?near=_agent` will use the agent's node for the sort. This is specified as part of the URL as a query parameter.
+    /// Note that using `near` will ignore `use_streaming_backend` and always use blocking queries, because the data required to
+    /// sort the results is not available to the streaming backend.
+    pub near: Option<&'a str>,
+    /// (string: "") Specifies the expression used to filter the queries results prior to returning the data.
+    pub filter: Option<&'a str>,
+}
+
+#[allow(non_snake_case)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+/// The node information of an instance providing a Consul service.
+pub struct CatalogNode {
+    /// The ID of the service node.
+    #[serde(rename = "ID")]
+    pub id: String,
+    /// The name of the Consul node on which the service is registered
+    pub node: String,
+    /// The IP address of the Consul node on which the service is registered.
+    pub address: String,
+    /// The datacenter where this node is running on.
+    pub datacenter: String,
+    /// Tagged addressed to register with.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub TaggedAddresses: Option<HashMap<String, String>>,
+    /// Optional key value meta associated with the service.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Meta: Option<HashMap<String, String>>,
+}
+
+pub(crate) type GetNodesResponse = Vec<CatalogNode>;
+
+/// Request to retrieve information about nodes int the Consul catalog.
 #[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
 pub struct GetServiceNodesRequest<'a> {
     /// Specifies the service to list services for. This is provided as part of the URL.

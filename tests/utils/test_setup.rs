@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rs_consul::*;
 type Result<T> = std::result::Result<T, rs_consul::ConsulError>;
 
@@ -72,6 +74,41 @@ pub(crate) async fn register_entity_with_checks(
             Namespace: None,
         }),
         Checks: checks,
+        SkipNodeUpdate: None,
+    };
+    consul
+        .register_entity(&payload)
+        .await
+        .expect("expected register_entity request to succeed");
+}
+
+pub(crate) async fn register_entity_with_address(
+    consul: &Consul,
+    service_name: &str,
+    node_id: &str,
+    address: &str,
+) {
+    let meta: HashMap<_, _> = (1..5)
+        .into_iter()
+        .map(|i| (format!("meta-key-{i}"), format!("meta-value-{i}")))
+        .collect();
+    let payload = RegisterEntityPayload {
+        ID: None,
+        Node: node_id.to_string(),
+        Address: address.to_string(),
+        Datacenter: None,
+        TaggedAddresses: Default::default(),
+        NodeMeta: meta,
+        Service: Some(RegisterEntityService {
+            ID: None,
+            Service: service_name.to_string(),
+            Tags: vec![],
+            TaggedAddresses: Default::default(),
+            Meta: Default::default(),
+            Port: Some(42424),
+            Namespace: None,
+        }),
+        Checks: Vec::new(),
         SkipNodeUpdate: None,
     };
     consul
@@ -163,4 +200,35 @@ pub(crate) fn verify_single_value_matches(
             .unwrap(),
         value
     )
+}
+
+pub(crate) async fn deregister_entity(
+    consul: &Consul,
+    node_id: String,
+    service_id: Option<String>,
+) {
+    let payload = DeregisterEntityPayload {
+        Node: Some(node_id),
+        Datacenter: None,
+        CheckID: None,
+        ServiceID: service_id,
+        Namespace: None,
+    };
+    consul
+        .deregister_entity(&payload)
+        .await
+        .expect("expected deregister_entity request to succeed");
+}
+
+pub(crate) async fn remove_service_node(
+    consul: &Consul,
+    node_id: String,
+    service_id: Option<String>,
+) {
+    // Remove the service from the node.
+    deregister_entity(consul, node_id.clone(), service_id).await;
+    // Remove the node. Note that if there are still some services
+    // using this node it will not be removed from the catalog and
+    // the call will succeed with the node still part of the catalog.
+    deregister_entity(consul, node_id, None).await;
 }

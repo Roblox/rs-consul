@@ -530,6 +530,31 @@ impl Consul {
         Ok(addresses_and_ports)
     }
 
+    /// Returns the nodes registered in the Consul catalog.
+    /// # Arguments:
+    /// - request - the [GetNodesRequest](consul::types::GetNodesRequest)
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    pub async fn get_nodes(
+        &self,
+        request: GetNodesRequest<'_>,
+        query_opts: Option<QueryOptions>,
+    ) -> Result<ResponseMeta<GetNodesResponse>> {
+        let query_opts = query_opts.unwrap_or_default();
+        let req = self.build_get_nodes_req(request, &query_opts);
+        let (response_body, index) = self
+            .execute_request(
+                req,
+                BoxBody::new(Empty::<Bytes>::new()),
+                query_opts.timeout,
+                Function::GetNodes,
+            )
+            .await?;
+        let response = serde_json::from_reader::<_, GetNodesResponse>(response_body.reader())
+            .map_err(ConsulError::ResponseDeserializationFailed)?;
+        Ok(ResponseMeta { response, index })
+    }
+
     /// Parse the address and port from a Consul [`ServiceNode`](`ServiceNode`) response.
     /// This chooses the Service address:port if the address is present. If not, it chooses the Node address with the service port.
     /// Context: To get a list of healthy instances for a service to return their IP/ports.
@@ -635,6 +660,36 @@ impl Consul {
             url.push_str(&format!("&filter={}", filter));
         }
         utils::add_query_option_params(&mut url, query_opts, '&');
+        req.uri(url)
+    }
+
+    // We assign to added_query_param for future proofing in case we add more parameters.
+    fn build_get_nodes_req(
+        &self,
+        request: GetNodesRequest<'_>,
+        query_opts: &QueryOptions,
+    ) -> http::request::Builder {
+        let req = hyper::Request::builder().method(Method::GET);
+        let mut url = String::new();
+        url.push_str(&format!("{}/v1/catalog/nodes", self.config.address));
+        let mut added_query_param = false;
+        if let Some(near) = request.near {
+            url = utils::add_query_param_separator(url, added_query_param);
+            url.push_str(&format!("near={}", near));
+            added_query_param = true;
+        }
+        if let Some(filter) = request.filter {
+            url = utils::add_query_param_separator(url, added_query_param);
+            url.push_str(&format!("filter={}", filter));
+            added_query_param = true;
+        }
+        if let Some(dc) = &query_opts.datacenter {
+            if !dc.is_empty() {
+                url = utils::add_query_param_separator(url, added_query_param);
+                url.push_str(&format!("dc={}", dc));
+            }
+        }
+
         req.uri(url)
     }
 

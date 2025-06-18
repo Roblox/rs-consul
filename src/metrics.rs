@@ -158,6 +158,8 @@ pub enum Function {
     DeregisterEntity,
     /// The get_service_nodes function.
     GetServiceNodes,
+    /// The get_nodes function.
+    GetNodes,
     /// The get_all_registered_services function.
     GetAllRegisteredServices,
     /// The get_session function.
@@ -175,6 +177,7 @@ impl Function {
             Function::RegisterEntity => "register_entity",
             Function::DeregisterEntity => "deregister_entity",
             Function::GetServiceNodes => "get_service_nodes",
+            Function::GetNodes => "get_nodes",
             Function::GetAllRegisteredServices => "get_all_registered_services",
             Function::GetSession => "get_session",
         }
