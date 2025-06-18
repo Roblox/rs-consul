@@ -31,4 +31,3 @@ services {
   checks = []
   tags = ["third"]
 }
-
