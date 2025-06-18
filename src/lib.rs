@@ -530,7 +530,7 @@ impl Consul {
         Ok(addresses_and_ports)
     }
 
-    /// returns the nodes registered in the Consul catalog.
+    /// Returns the nodes registered in the Consul catalog.
     /// # Arguments:
     /// - request - the [GetNodesRequest](consul::types::GetNodesRequest)
     /// # Errors:
