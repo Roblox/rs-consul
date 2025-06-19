@@ -7,6 +7,18 @@ pub(crate) fn get_client() -> Consul {
     let conf: Config = Config::from_env();
     Consul::new(conf)
 }
+/// a consul client with write permission allows for manipulating tokens
+pub(crate) fn get_privileged_client() -> Consul {
+    use std::env;
+    let addr = env::var("CONSUL_HTTP_ADDR").unwrap_or_else(|_| "http://127.0.0.1:8500".to_string());
+    let conf: Config = Config {
+        address: addr,
+        token: Some(String::from("8fc9e787-674f-0709-cfd5-bfdabd73a70d")), // use initial-managment
+        // token hardcoded in config.hcl
+        ..Default::default()
+    };
+    Consul::new(conf)
+}
 pub(crate) async fn register_entity(consul: &Consul, service_name: &String, node_id: &str) {
     let ResponseMeta {
         response: service_names_before_register,

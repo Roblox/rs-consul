@@ -70,4 +70,8 @@ pub enum ConsulError {
     /// An error from ureq occurred.
     #[error("UReq error: {0}")]
     UReqError(#[from] ureq::Error),
+
+    /// Failed to delete Token.
+    #[error("Failed to delete the token")]
+    TokenDeleteFailed,
 }

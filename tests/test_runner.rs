@@ -7,7 +7,124 @@ use test_setup::*;
 
 pub use types::*;
 
-#[cfg(test)]
+mod acl_tests {
+    use super::*;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_acl_retrieve_tokens() {
+        let consul = get_privileged_client();
+        let result = consul.get_acl_tokens().await.unwrap();
+
+        // test against the initial managment token hardcoded in config.hcl
+        assert!(
+            result
+                .iter()
+                .any(|token| token.secret_id == "8fc9e787-674f-0709-cfd5-bfdabd73a70d")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_acl_create_token() {
+        let consul = get_privileged_client();
+
+        let token_payload = CreateACLTokenPayload {
+            description: Some("Test token".to_owned()),
+            secret_id: Some("00000000-2223-1111-1111-222222222223".to_owned()),
+            ..Default::default()
+        };
+        let result = consul.create_acl_token(&token_payload).await.unwrap();
+
+        assert!(result.secret_id == "00000000-2223-1111-1111-222222222223");
+        assert!(result.description == "Test token");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_read_token() {
+        let consul = get_privileged_client();
+
+        // create a token with a specific accessor_id for testing
+        let token_payload = CreateACLTokenPayload {
+            description: Some("Token created in acl_tests::test_read_token".to_owned()),
+            secret_id: Some("20000000-9494-1111-1111-222222222229".to_owned()),
+            accessor_id: Some("1d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned()),
+            ..Default::default()
+        };
+        let _ = consul.create_acl_token(&token_payload).await.unwrap();
+        // now read the token by the accessor_id
+        let result = consul
+            .read_acl_token("1d5faa9a-ec33-4514-b0c8-52ea5346d814".to_owned())
+            .await
+            .unwrap();
+
+        assert!(result.secret_id == "20000000-9494-1111-1111-222222222229");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_acl_policies() {
+        let consul = get_privileged_client();
+
+        let result = consul.get_acl_policies().await.unwrap();
+
+        assert!(
+            result
+                .iter()
+                .any(|policy| policy.name == "global-management"
+                    && policy.id == "00000000-0000-0000-0000-000000000001")
+        );
+    }
+}
+
+mod smoke_acl {
+
+    use super::*;
+
+    #[tokio::test]
+    async fn smoke_test_token_policy_retrieval() {
+        // get an instance of a privileged acl client
+        let consul = get_privileged_client();
+
+        // Create a policy
+        let policy_payload = CreateACLPolicyRequest {
+            name: "smoke_test_policy_1".to_owned(),
+            ..Default::default()
+        };
+        let policy_result = consul.create_acl_policy(&policy_payload).await.unwrap();
+
+        // Create a token with the newly created policy
+        let policy_link_vec = vec![ACLTokenPolicyLink {
+            name: Some("smoke_test_policy_1".to_owned()),
+            ..Default::default()
+        }];
+        let token_payload = CreateACLTokenPayload {
+            description: Some("Smmoke test".to_owned()),
+            secret_id: Some("00000000-9494-1111-1111-222222222229".to_owned()),
+            accessor_id: Some("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned()),
+            policies: policy_link_vec,
+            ..Default::default()
+        };
+        let _ = consul.create_acl_token(&token_payload).await.unwrap();
+
+        // read the newly created token
+        let result = consul
+            .read_acl_token("8d5faa9a-1111-1111-b0c8-52ea5346d814".to_owned())
+            .await
+            .unwrap();
+        assert!(result.policies.first().unwrap().name == Some("smoke_test_policy_1".to_owned()));
+
+        assert!(result.secret_id == "00000000-9494-1111-1111-222222222229".to_owned());
+
+        // delete the created token
+        let token_delete_result = consul
+            .delete_acl_token("00000000-9494-1111-1111-222222222229".to_owned())
+            .await
+            .unwrap();
+        let policy_delete_result = consul.delete_acl_policy(policy_result.id).await.unwrap();
+
+        // delete the policy
+        assert_eq!(token_delete_result, ());
+        assert_eq!(policy_delete_result, ());
+    }
+}
+
 mod tests {
     use std::time::Duration;
     use std::time::SystemTime;
