@@ -13,15 +13,17 @@ jobs:
         env:
           # We pass the config as a JSON here to simulate one service with 3 nodes.
           # TODO: Ideally, we should use the same setup in local environment (`testdata/config.hcl`) in GHA test.
-          CONSUL_LOCAL_CONFIG: '{"acl": [{"default_policy": "allow", "enable_token_persistence": true, "enabled": true}], "services": [ {"address": "1.1.1.1", "checks": [], "id": "test-service-1", "name": "test-service", "port": 20001, "tags": ["first"]}, {"address": "2.2.2.2", "checks": [], "id": "test-service-2", "name": "test-service", "port": 20002, "tags": ["second"]}, {"address": "3.3.3.3", "checks": [], "id": "test-service-3", "name": "test-service", "port": 20003, "tags": ["third"]} ]}'
+          CONSUL_LOCAL_CONFIG: '{"acl":[{"enabled":true,"default_policy":"allow","enable_token_persistence":true,"tokens":[{"initial_management":"8fc9e787-674f-0709-cfd5-bfdabd73a70d"}]}],"services":[{"id":"test-service-1","name":"test-service","address":"1.1.1.1","port":20001,"checks":[],"tags":["first"]},{"id":"test-service-2","name":"test-service","address":"2.2.2.2","port":20002,"checks":[],"tags":["second"]},{"id":"test-service-3","name":"test-service","address":"3.3.3.3","port":20003,"checks":[],"tags":["third"]}]}'
     env:
       CONSUL_HTTP_ADDR: http://consul:8500
-
+    strategy:
+      matrix:
+        features: [""]
     steps:
       - uses: actions/checkout@v2
 
-      - name: Test
-        run: cargo test
+      - name: Tests
+        run: cargo test "${{ matrix.features }}"
 
   dry-run:
     runs-on: ubuntu-latest

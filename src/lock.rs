@@ -1,9 +1,12 @@
-use http_body_util::combinators::BoxBody;
+use http::Method;
+use http_body_util::{Full, combinators::BoxBody};
+use hyper::body::Buf;
 use hyper::body::Bytes;
 
 use crate::{
-    Consul, CreateOrUpdateKeyRequest, LockRequest, LockWatchRequest, ReadKeyRequest,
-    ReadKeyResponse, ResponseMeta, Result, errors::ConsulError,
+    Consul, CreateOrUpdateKeyRequest, CreateSessionRequest, LockRequest, LockWatchRequest,
+    ReadKeyRequest, ReadKeyResponse, ResponseMeta, Result, SessionResponse, errors::ConsulError,
+    utils,
 };
 
 /// Represents a lock against Consul.
@@ -46,6 +49,40 @@ impl Drop for Lock<'_> {
     }
 }
 impl Consul {
+    /// Obtains a session ID
+    /// # Arguments:
+    /// - request - the [LockRequest](consul::types::LockRequest)
+    /// # Errors:
+    /// [ConsulError](consul::ConsulError) describes all possible errors returned by this api.
+    async fn get_session(&self, request: LockRequest<'_>) -> Result<SessionResponse> {
+        let session_req = CreateSessionRequest {
+            lock_delay: request.lock_delay,
+            behavior: request.behavior,
+            ttl: request.timeout,
+            ..Default::default()
+        };
+
+        let mut req = hyper::Request::builder().method(Method::PUT);
+        let mut url = String::new();
+        url.push_str(&format!("{}/v1/session/create?", self.config.address));
+        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
+        req = req.uri(url);
+        let create_session_json =
+            serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
+        let (response_body, _index) = self
+            .execute_request(
+                req,
+                BoxBody::new(Full::<Bytes>::new(Bytes::from(
+                    create_session_json.into_bytes(),
+                ))),
+                None,
+                crate::Function::GetSession,
+            )
+            .await?;
+        serde_json::from_reader(response_body.reader())
+            .map_err(ConsulError::ResponseDeserializationFailed)
+    }
+
     /// Obtains a lock against a specific key in consul. See the [consul docs](https://learn.hashicorp.com/tutorials/consul/application-leader-elections?in=consul/developer-configuration) for more information.
     /// # Arguments:
     /// - request - the [LockRequest](consul::types::LockRequest)

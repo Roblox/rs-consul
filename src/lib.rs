@@ -70,6 +70,13 @@ pub use metrics::MetricInfo;
 pub use metrics::{Function, HttpMethod};
 pub use types::*;
 
+/// Access Control List(acl) to control authentication and authorization
+pub mod acl;
+
+/// Types for acl related operations
+pub mod acl_types;
+pub use acl_types::*;
+
 /// Consul errors and Result type
 mod errors;
 #[cfg(feature = "trace")]
@@ -128,7 +135,6 @@ impl Config {
         }
     }
 }
-
 /// Type alias for a Hyper client using a hyper_rusttls HttpsConnector
 pub type HttpsClient =
     Client<hyper_rustls::HttpsConnector<HttpConnector>, BoxBody<Bytes, Infallible>>;
@@ -612,35 +618,6 @@ impl Consul {
         req.uri(url)
     }
 
-    async fn get_session(&self, request: LockRequest<'_>) -> Result<SessionResponse> {
-        let session_req = CreateSessionRequest {
-            lock_delay: request.lock_delay,
-            behavior: request.behavior,
-            ttl: request.timeout,
-            ..Default::default()
-        };
-
-        let mut req = hyper::Request::builder().method(Method::PUT);
-        let mut url = String::new();
-        url.push_str(&format!("{}/v1/session/create?", self.config.address));
-        url = utils::add_namespace_and_datacenter(url, request.namespace, request.datacenter);
-        req = req.uri(url);
-        let create_session_json =
-            serde_json::to_string(&session_req).map_err(ConsulError::InvalidRequest)?;
-        let (response_body, _index) = self
-            .execute_request(
-                req,
-                BoxBody::new(Full::<Bytes>::new(Bytes::from(
-                    create_session_json.into_bytes(),
-                ))),
-                None,
-                Function::GetSession,
-            )
-            .await?;
-        serde_json::from_reader(response_body.reader())
-            .map_err(ConsulError::ResponseDeserializationFailed)
-    }
-
     fn build_get_service_nodes_req(
         &self,
         request: GetServiceNodesRequest<'_>,
@@ -764,6 +741,7 @@ impl Consul {
                 Some(resp.to_string()),
             ));
         }
+
         let index = match response.headers().get("x-consul-index") {
             Some(header) => header.to_str().unwrap_or("0").parse::<u64>().unwrap_or(0),
             None => 0,
