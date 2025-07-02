@@ -1,8 +1,9 @@
+use consul_derive::ConsulBuilder;
 use serde::{self, Deserialize, Serialize};
 
 /// Information related ACL token.
 /// See https://developer.hashicorp.com/consul/docs/security/acl/tokens for more information.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ConsulBuilder)]
 #[serde(rename_all = "PascalCase")]
 pub struct ACLToken {
     /// Unique ID
