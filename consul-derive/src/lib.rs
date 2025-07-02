@@ -37,6 +37,18 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
         }
     });
 
+    let getters = fields.iter().map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        let get_fn_name = format_ident!("get_{}", name.as_ref().unwrap());
+        quote! {
+            #[doc = concat!(" Returns a reference to the `", stringify!(#name), "` field.")]
+            pub fn #get_fn_name(&self) -> &#ty {
+                &self.#name
+            }
+        }
+    });
+
     let setters = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
@@ -94,6 +106,8 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
             }
 
             #(#setters)*
+
+            #(#getters)*
         }
     };
 
