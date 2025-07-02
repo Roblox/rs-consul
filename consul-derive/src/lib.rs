@@ -10,6 +10,7 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
     let builder_name = format_ident!("{}", name);
 
     let fields = match &input.data {
+        // extract structs only
         Data::Struct(data_struct) => match &data_struct.fields {
             Fields::Named(named) => &named.named,
             _ => panic!("ConsulBuilder only supports named fields"),
@@ -17,14 +18,7 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
         _ => panic!("ConsulBuilder only supports structs"),
     };
 
-    let _ = fields.iter().map(|f| {
-        let name = &f.ident;
-        let ty = &f.ty;
-        quote! {
-            #name: #ty
-        }
-    });
-
+    // initialise fields
     let builder_inits = fields.iter().map(|f| {
         let name = &f.ident;
         if is_option(&f.ty) {
@@ -37,6 +31,7 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
         }
     });
 
+    // the getters format
     let getters = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
@@ -49,6 +44,7 @@ pub fn derive_consul_builder(input: TokenStream) -> TokenStream {
         }
     });
 
+    // setters format, it changes depending on type(Vec or Option)
     let setters = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
@@ -138,6 +134,9 @@ fn is_vec(ty: &Type) -> bool {
     }
     false
 }
+
+/// get vec inner types
+// get vec inner types, also taking into account some special cases(fully qualified paths)
 fn get_vec_inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(tp) = ty {
         // Check for `Vec<T>`
@@ -163,6 +162,9 @@ fn get_vec_inner_type(ty: &Type) -> Option<&Type> {
     }
     None
 }
+
+/// get option inner type
+// same thing as vec
 fn get_option_inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         // Check for `Option<T>`
