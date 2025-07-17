@@ -573,3 +573,49 @@ mod tests {
         remove_service_node(&consul, node_id, Some(new_service_name)).await;
     }
 }
+
+/// tests to ensure that Bon the builder can Build with minimal fields set
+mod minimal_setters_build_test {
+    use rs_consul::{
+        ACLTokenPolicyLink, CreateACLPolicyRequest, CreateACLTokenPayload, DeleteKeyRequest,
+        DeregisterEntityPayload, GetNodesRequest, GetServiceNodesRequest, LockRequest,
+        ReadKeyRequest, RegisterEntityCheck, RegisterEntityPayload, RegisterEntityService,
+    };
+
+    #[test]
+    fn test() {
+        let _ = ACLTokenPolicyLink::builder().build();
+        let _ = CreateACLTokenPayload::builder()
+            .policies(vec![
+                ACLTokenPolicyLink::builder()
+                    .name("my-policy".to_owned())
+                    .build(),
+            ])
+            .build();
+        let _ = CreateACLPolicyRequest::builder()
+            .name("hehe".to_owned())
+            .build();
+
+        let _ = DeleteKeyRequest::builder().key("test-key").build();
+        let _ = ReadKeyRequest::builder().key("test-key").build();
+        let _ = CreateACLPolicyRequest::builder()
+            .name("hehe".to_owned())
+            .build();
+        let _ = LockRequest::builder().key("key-test").build();
+        let _ = RegisterEntityPayload::builder()
+            .Node("node-ddd".to_owned())
+            .Address("2.2.2.2".to_owned())
+            .build();
+        let _ = DeregisterEntityPayload::builder().build();
+        let _ = RegisterEntityService::builder()
+            .Service("serv".to_owned())
+            .build();
+        let _ = RegisterEntityCheck::builder()
+            .Name("hehe".to_owned())
+            .build();
+        let _ = GetNodesRequest::builder().build();
+        let _ = GetServiceNodesRequest::builder()
+            .service("service-a")
+            .build();
+    }
+}

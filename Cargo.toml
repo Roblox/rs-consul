@@ -18,7 +18,7 @@ trace = ["dep:opentelemetry"]
 # keep this list sorted!
 [dependencies]
 base64 = "0.22"
-consul-derive = { path = "consul-derive" }
+bon = "3.6.4"
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }

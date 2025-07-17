@@ -71,88 +71,105 @@ pub struct ResponseMeta<T> {
 }
 
 /// Represents a request to delete a key or all keys sharing a prefix from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct DeleteKeyRequest<'a> {
     /// Specifies the path of the key to delete.
     pub key: &'a str,
     /// Specifies the datacenter to query. This will default to the datacenter of the agent being queried.
+    #[builder(default)]
     pub datacenter: &'a str,
     /// Specifies to delete all keys which have the specified prefix.
     /// Without this, only a key with an exact match will be deleted.
+    #[builder(default)]
     pub recurse: bool,
     /// Specifies to use a Check-And-Set operation.
     /// This is very useful as a building block for more complex synchronization primitives.
     /// The index must be greater than 0 for Consul to take any action: a 0 index will not delete the key.
     /// If the index is non-zero, the key is only deleted if the index matches the ModifyIndex of that key.
+    #[builder(default)]
     pub check_and_set: u32,
     /// Specifies the namespace to query.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
+    #[builder(default)]
     pub namespace: &'a str,
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct ReadKeyRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
     /// Specifies the namespace to query.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
     /// For recursive lookups, the namespace may be specified as '*' and then results will be returned for all namespaces. Added in Consul 1.7.0.
+    #[builder(default)]
     pub namespace: &'a str,
     /// Specifies the datacenter to query.
     /// This will default to the datacenter of the agent being queried.
+    #[builder(default)]
     pub datacenter: &'a str,
     /// Specifies if the lookup should be recursive and key treated as a prefix instead of a literal match.
+    #[builder(default)]
     pub recurse: bool,
     /// Specifies the string to use as a separator for recursive key lookups.
     /// This option is only used when paired with the keys parameter to limit the prefix of keys returned, only up to the given separator.
+    #[builder(default)]
     pub separator: &'a str,
     /// The consistency mode for reads. See also [ConsistencyMode](consul::types::ConsistencyMode)
+    #[builder(default)]
     pub consistency: ConsistencyMode,
     /// Endpoints that support blocking queries return an HTTP header named X-Consul-Index.
     /// This is a unique identifier representing the current state of the requested resource.
     /// On subsequent requests for this resource, the client can set the index query string parameter to the value of X-Consul-Index, indicating that the client wishes to wait for any changes subsequent to that index.
     pub index: Option<u64>,
     /// The time to wait for watching a lock in a blocking fashion.
+    #[builder(default)]
     pub wait: Duration,
 }
 
 /// Represents a request to read a key from Consul's Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct LockWatchRequest<'a> {
     /// Specifies the path of the key to read.
     pub key: &'a str,
     /// Specifies the datacenter to query.
     /// This will default to the datacenter of the agent being queried.
+    #[builder(default)]
     pub datacenter: &'a str,
     /// Specifies the namespace to query.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
     /// For recursive lookups, the namespace may be specified as '*' and then results will be returned for all namespaces. Added in Consul 1.7.0.
+    #[builder(default)]
     pub namespace: &'a str,
     /// The consistency mode for reads. See also [ConsistencyMode](consul::types::ConsistencyMode)
+    #[builder(default)]
     pub consistency: ConsistencyMode,
     /// Endpoints that support blocking queries return an HTTP header named X-Consul-Index.
     /// This is a unique identifier representing the current state of the requested resource.
     /// On subsequent requests for this resource, the client can set the index query string parameter to the value of X-Consul-Index, indicating that the client wishes to wait for any changes subsequent to that index.
     pub index: Option<u64>,
     /// The time to wait for watching a lock in a blocking fashion.
+    #[builder(default)]
     pub wait: Duration,
 }
 
 /// Represents a request to read a key from Consul Key Value store.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct CreateOrUpdateKeyRequest<'a> {
     /// Specifies the path of the key.
     pub key: &'a str,
     /// Specifies the namespace to query.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
     /// This is specified as part of the URL as a query parameter. Added in Consul 1.7.0.
+    #[builder(default)]
     pub namespace: &'a str,
     /// Specifies the datacenter to query.
     /// This will default to the datacenter of the agent being queried.
+    #[builder(default)]
     pub datacenter: &'a str,
     /// Specifies an unsigned value between 0 and (2^64)-1.
     /// Clients can choose to use this however makes sense for their application.
+    #[builder(default)]
     pub flags: u64,
     /// Specifies to use a Check-And-Set operation.
     /// This is very useful as a building block for more complex synchronization primitives.
@@ -165,11 +182,13 @@ pub struct CreateOrUpdateKeyRequest<'a> {
     /// A key does not need to exist to be acquired. If the lock is already held by the given session, then the LockIndex is not incremented but the key contents are updated.
     /// This lets the current lock holder update the key contents without having to give up the lock and reacquire it.
     /// Note that an update that does not include the acquire parameter will proceed normally even if another session has locked the key.
+    #[builder(default)]
     pub acquire: &'a str,
     /// Supply a session ID to use in a release operation.
     /// This is useful when paired with ?acquire= as it allows clients to yield a lock.
     /// This will leave the LockIndex unmodified but will clear the associated Session of the key.
     /// The key must be held by this session to be unlocked.
+    #[builder(default)]
     pub release: &'a str,
 }
 
@@ -198,20 +217,23 @@ pub struct ReadKeyResponse {
 }
 
 /// Represents a request to create a lock .
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Copy)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, Copy, bon::Builder)]
 #[serde(rename_all = "PascalCase")]
 pub struct LockRequest<'a> {
     /// The key to use for locking.
     pub key: &'a str,
     /// The name of the session to use.
+    #[builder(default)]
     pub session_id: &'a str,
     /// Specifies the namespace to use.
     /// If not provided, the namespace will be inferred from the request's ACL token, or will default to the default namespace.
     /// This is specified as part of the URL as a query parameter. Added in Consul 1.7.0.
+    #[builder(default)]
     pub namespace: &'a str,
     /// Specifies the datacenter to query.
     /// This will default to the datacenter of the agent being queried.
     /// This is specified as part of the URL as a query parameter.
+    #[builder(default)]
     pub datacenter: &'a str,
     /// Specifies the duration of a session (between 10s and 86400s).
     /// If provided, the session is invalidated if it is not renewed before the TTL expires.
@@ -219,12 +241,15 @@ pub struct LockRequest<'a> {
     /// When locks are forcibly expired, such as when following the leader election pattern in an application, sessions may not be reaped for up to double this TTL, so long TTL values (> 1 hour) should be avoided.
     /// Defaults to 10 seconds.
     #[default(_code = "Duration::from_secs(10)")]
+    #[builder(default)]
     pub timeout: Duration,
     /// Controls the behavior to take when a session is invalidated. See also [LockExpirationBehavior](consul::types::LockExpirationBehavior)
+    #[builder(default)]
     pub behavior: LockExpirationBehavior,
     /// Specifies the duration for the lock delay.
     /// Defaults to 1 second.
     #[default(_code = "Duration::from_secs(1)")]
+    #[builder(default)]
     pub lock_delay: Duration,
 }
 
@@ -263,13 +288,13 @@ pub enum ConsistencyMode {
     Stale,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub(crate) struct SessionResponse {
     #[serde(rename = "ID")]
     pub(crate) id: String,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct CreateSessionRequest {
     #[default(_code = "Duration::from_secs(0)")]
@@ -291,7 +316,7 @@ pub(crate) struct CreateSessionRequest {
 /// Payload struct to register or update entries in consul's catalog.
 /// See https://www.consul.io/api-docs/catalog#register-entity for more information.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, bon::Builder)]
 pub struct RegisterEntityPayload {
     /// Optional UUID to assign to the node. This string is required to be 36-characters and UUID formatted.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,15 +330,18 @@ pub struct RegisterEntityPayload {
     pub Datacenter: Option<String>,
     /// Tagged addressed to register with.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[builder(default)]
     pub TaggedAddresses: HashMap<String, String>,
     /// KV metadata paris to register with.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[builder(default)]
     pub NodeMeta: HashMap<String, String>,
     /// Optional service to register.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub Service: Option<RegisterEntityService>,
     /// Checks to register.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[builder(default)]
     pub Checks: Vec<RegisterEntityCheck>,
     /// Whether to skip updating the nodes information in the registration.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -323,7 +351,7 @@ pub struct RegisterEntityPayload {
 /// The service to deregister with consul's global catalog.
 /// See https://www.consul.io/api/agent/service for more information.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, bon::Builder)]
 pub struct DeregisterEntityPayload {
     /// The node to execute the check on.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -345,7 +373,7 @@ pub struct DeregisterEntityPayload {
 /// The service to register with consul's global catalog.
 /// See https://www.consul.io/api/agent/service for more information.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, bon::Builder)]
 pub struct RegisterEntityService {
     /// ID to register service will, defaults to Service.Service property.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -354,12 +382,15 @@ pub struct RegisterEntityService {
     pub Service: String,
     /// Optional tags associated with the service.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[builder(default)]
     pub Tags: Vec<String>,
     /// Optional map of explicit LAN and WAN addresses for the service.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[builder(default)]
     pub TaggedAddresses: HashMap<String, String>,
     /// Optional key value meta associated with the service.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[builder(default)]
     pub Meta: HashMap<String, String>,
     /// The port of the service
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -372,7 +403,7 @@ pub struct RegisterEntityService {
 /// Information related to registering a check.
 /// See https://www.consul.io/docs/discovery/checks for more information.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, bon::Builder)]
 pub struct RegisterEntityCheck {
     /// The node to execute the check on.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -394,12 +425,13 @@ pub struct RegisterEntityCheck {
     pub ServiceID: Option<String>,
     /// Details for a TCP or HTTP health check.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[builder(default)]
     pub Definition: HashMap<String, String>,
 }
 
 /// Request for the nodes providing a specified service registered in Consul.
 /// See https://developer.hashicorp.com/consul/api-docs/catalog#list-nodes for more information.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct GetNodesRequest<'a> {
     /// Specifies a node name to sort the node list in ascending order based on the estimated round trip time from that node.
     /// Passing `?near=_agent` will use the agent's node for the sort. This is specified as part of the URL as a query parameter.
@@ -435,7 +467,7 @@ pub struct CatalogNode {
 pub(crate) type GetNodesResponse = Vec<CatalogNode>;
 
 /// Request to retrieve information about nodes int the Consul catalog.
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
 pub struct GetServiceNodesRequest<'a> {
     /// Specifies the service to list services for. This is provided as part of the URL.
     pub service: &'a str,
@@ -446,6 +478,7 @@ pub struct GetServiceNodesRequest<'a> {
     pub near: Option<&'a str>,
     /// (bool: false) Specifies that the server should return only nodes with all checks in the passing state.
     /// This can be used to avoid additional filtering on the client side.
+    #[builder(default)]
     pub passing: bool,
     /// (string: "") Specifies the expression used to filter the queries results prior to returning the data.
     pub filter: Option<&'a str>,
