@@ -32,7 +32,7 @@ pub struct ACLToken {
 
 /// Information related to Policies
 /// see https://developer.hashicorp.com/consul/docs/security/acl/acl-policies for more information
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, bon::Builder)]
 #[serde(rename_all = "PascalCase")]
 pub struct ACLTokenPolicyLink {
     /// Policy ID
@@ -45,7 +45,7 @@ pub struct ACLTokenPolicyLink {
 /// Create ACL token payload
 /// See https://developer.hashicorp.com/consul/api-docs/acl/tokens for more information.
 /// TODO: NodeIdentities,TemplatedPolicies, ServiceIdentities
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, bon::Builder)]
 #[serde(rename_all = "PascalCase")]
 pub struct CreateACLTokenPayload {
     /// Unique ID
@@ -64,6 +64,7 @@ pub struct CreateACLTokenPayload {
     pub policies: Vec<ACLTokenPolicyLink>,
     /// Token only valid in this datacenter
     #[serde(default)]
+    #[builder(default)]
     pub local: bool,
     /// Creation time
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,7 +113,7 @@ pub struct ACLPolicy {
 }
 
 /// Payload to create an ACL Policy
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Default, bon::Builder)]
 #[serde(rename_all = "PascalCase")]
 pub struct CreateACLPolicyRequest {
     /// Name of the policy (unique)
