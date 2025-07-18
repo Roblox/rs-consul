@@ -576,6 +576,8 @@ mod tests {
 
 /// tests to ensure that Bon the builder can Build with minimal fields set
 mod minimal_setters_build_test {
+    use std::time::Duration;
+
     use rs_consul::{
         ACLTokenPolicyLink, CreateACLPolicyRequest, CreateACLTokenPayload, DeleteKeyRequest,
         DeregisterEntityPayload, GetNodesRequest, GetServiceNodesRequest, LockRequest,
@@ -583,7 +585,7 @@ mod minimal_setters_build_test {
     };
 
     #[test]
-    fn test() {
+    fn test_builder_default() {
         let _ = ACLTokenPolicyLink::builder().build();
         let _ = CreateACLTokenPayload::builder()
             .policies(vec![
@@ -601,7 +603,11 @@ mod minimal_setters_build_test {
         let _ = CreateACLPolicyRequest::builder()
             .name("hehe".to_owned())
             .build();
-        let _ = LockRequest::builder().key("key-test").build();
+
+        let l_req = LockRequest::builder().key("key-test").build();
+        assert_eq!(l_req.timeout, Duration::from_secs(10));
+        assert_eq!(l_req.lock_delay, Duration::from_secs(1));
+
         let _ = RegisterEntityPayload::builder()
             .Node("node-ddd".to_owned())
             .Address("2.2.2.2".to_owned())

@@ -241,7 +241,7 @@ pub struct LockRequest<'a> {
     /// When locks are forcibly expired, such as when following the leader election pattern in an application, sessions may not be reaped for up to double this TTL, so long TTL values (> 1 hour) should be avoided.
     /// Defaults to 10 seconds.
     #[default(_code = "Duration::from_secs(10)")]
-    #[builder(default)]
+    #[builder(default = Duration::from_secs(10))]
     pub timeout: Duration,
     /// Controls the behavior to take when a session is invalidated. See also [LockExpirationBehavior](consul::types::LockExpirationBehavior)
     #[builder(default)]
@@ -249,7 +249,7 @@ pub struct LockRequest<'a> {
     /// Specifies the duration for the lock delay.
     /// Defaults to 1 second.
     #[default(_code = "Duration::from_secs(1)")]
-    #[builder(default)]
+    #[builder(default = Duration::from_secs(1))]
     pub lock_delay: Duration,
 }
 
@@ -294,7 +294,7 @@ pub(crate) struct SessionResponse {
     pub(crate) id: String,
 }
 
-#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq, bon::Builder)]
+#[derive(Clone, Debug, SmartDefault, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct CreateSessionRequest {
     #[default(_code = "Duration::from_secs(0)")]
