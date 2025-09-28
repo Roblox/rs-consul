@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.13.0 - 2025-09-27
+
+### Added
+
+- Added support for ACL functionality.
+- Added builders for request types.
+
+### Changed
+
+- Upgrade `opentelemetry` from `0.30` to `0.31`.
+
 ## 0.12.1 - 2025-06-18
 
 ### Changed

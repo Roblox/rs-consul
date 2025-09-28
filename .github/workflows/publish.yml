@@ -6,7 +6,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: rust:1.87
+    container: rust:1.90
     services:
       consul:
         image: consul:1.11.11
@@ -27,7 +27,7 @@ jobs:
 
   dry-run:
     runs-on: ubuntu-latest
-    container: rust:1.87
+    container: rust:1.90
 
     steps:
       - uses: actions/checkout@v2
@@ -38,7 +38,7 @@ jobs:
   publish:
     needs: [test, dry-run]
     runs-on: ubuntu-latest
-    container: rust:1.87
+    container: rust:1.90
     environment: crates-publish
 
     steps:

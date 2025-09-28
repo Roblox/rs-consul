@@ -110,14 +110,14 @@ mod smoke_acl {
             .unwrap();
         assert!(result.policies.first().unwrap().name == Some("smoke_test_policy_1".to_owned()));
 
-        assert!(result.secret_id == "00000000-9494-1111-1111-222222222229".to_owned());
+        assert!(&result.secret_id == "00000000-9494-1111-1111-222222222229");
 
         // delete the created token
-        let token_delete_result = consul
+        consul
             .delete_acl_token("00000000-9494-1111-1111-222222222229".to_owned())
             .await
             .unwrap();
-        let policy_delete_result = consul.delete_acl_policy(policy_result.id).await.unwrap();
+        consul.delete_acl_policy(policy_result.id).await.unwrap();
 
         // delete the policy
         assert_eq!(token_delete_result, ());
