@@ -660,7 +660,9 @@ impl Consul {
             url.push_str(&format!("filter={}", filter));
             added_query_param = true;
         }
-        if let Some(dc) = &query_opts.datacenter && !dc.is_empty(){
+        if let Some(dc) = &query_opts.datacenter
+            && !dc.is_empty()
+        {
             url = utils::add_query_param_separator(url, added_query_param);
             url.push_str(&format!("dc={}", dc));
         }

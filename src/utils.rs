@@ -5,11 +5,15 @@ pub(crate) fn add_query_option_params(
     query_opts: &QueryOptions,
     mut separator: char,
 ) {
-    if let Some(ns) = &query_opts.namespace && !ns.is_empty() {
+    if let Some(ns) = &query_opts.namespace
+        && !ns.is_empty()
+    {
         uri.push_str(&format!("{}ns={}", separator, ns));
         separator = '&';
     }
-    if let Some(dc) = &query_opts.datacenter && !dc.is_empty() {
+    if let Some(dc) = &query_opts.datacenter
+        && !dc.is_empty()
+    {
         uri.push_str(&format!("{}dc={}", separator, dc));
         separator = '&';
     }
