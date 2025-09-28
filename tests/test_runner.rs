@@ -117,11 +117,8 @@ mod smoke_acl {
             .delete_acl_token("00000000-9494-1111-1111-222222222229".to_owned())
             .await
             .unwrap();
-        consul.delete_acl_policy(policy_result.id).await.unwrap();
-
         // delete the policy
-        assert_eq!(token_delete_result, ());
-        assert_eq!(policy_delete_result, ());
+        consul.delete_acl_policy(policy_result.id).await.unwrap();
     }
 }
 
@@ -296,7 +293,7 @@ mod tests {
             .iter()
             .map(|cn| assert_eq!("dc1", cn.datacenter))
             .collect();
-        let filter = format!("Meta+contains+%22meta-key-1%22");
+        let filter = "Meta+contains+%22meta-key-1%22".to_owned();
         let req = GetNodesRequest {
             filter: Some(&filter),
             ..Default::default()
@@ -324,7 +321,7 @@ mod tests {
         )
         .await;
         // The nodes should still exist, even without services:
-        let filter = format!("Meta+contains+%22meta-key-1%22");
+        let filter = "Meta+contains+%22meta-key-1%22".to_owned();
         let req = GetNodesRequest {
             filter: Some(&filter),
             ..Default::default()
