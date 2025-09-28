@@ -9,7 +9,7 @@ async fn main() {
         ..Default::default()
     };
     let consul = Consul::new(consul_config);
-    let _res = consul
+    consul
         .delete_acl_token("58df5025-134c-8999-6bc3-992fe268a39e".to_string())
         .await
         .unwrap();

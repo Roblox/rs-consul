@@ -101,7 +101,6 @@ pub(crate) async fn register_entity_with_address(
     address: &str,
 ) {
     let meta: HashMap<_, _> = (1..5)
-        .into_iter()
         .map(|i| (format!("meta-key-{i}"), format!("meta-value-{i}")))
         .collect();
     let payload = RegisterEntityPayload {
