@@ -13,21 +13,31 @@ Simply include the rs-consul in your Cargo dependencies.
 
 ```toml
 [dependencies]
-rs-consul = "0.9.0"
+rs-consul = "0.14.0"
 ```
+
 ## Usage
+
 Check [/examples](/examples) for more detailed usage
+
 ### Initialize the client
+
 #### Environment Configuration (Recommended)
+
 The client can be configured automatically using environment variables:
+
 ```rust
 use rs_consul::{types::*, Config, Consul};
 
 let consul_config = Config::from_env();
 let consul = Consul::new(consul_config);
+
 ```
+
 #### Manual Configuration
+
 Alternatively, you can configure the client manually:
+
 ```rust
 let consul_config = Config {
     address: "http://localhost:8500".to_string(), 
@@ -36,8 +46,11 @@ let consul_config = Config {
 };
 
 let consul = Consul::new(consul_config);
+
 ```
+
 ### Register a Service
+
 ```rust
     let node_id = "root-node"; //node name
     let service_name = "new-service-1"; //service name
@@ -64,7 +77,9 @@ let consul = Consul::new(consul_config);
 
     consul.register_entity(&payload).await.unwrap();
 ```
+
 ### Deregister a service
+
 ```rust
     let node_id = "root-node";
     let service_name = "new-service-1";

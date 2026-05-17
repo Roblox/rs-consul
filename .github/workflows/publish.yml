@@ -6,7 +6,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: rust:1.90
+    container: rust:1.95
     services:
       consul:
         image: consul:1.11.11
