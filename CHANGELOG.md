@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+### Changed
+
+- Upgrade `base64` from `0.22` to `0.23`.
+- Upgrade `opentelemetry` from `0.32` to `0.33`.
+
 ## 0.14.0 - 2026-05-17
 
 ### Changed
