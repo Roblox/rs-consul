@@ -8,7 +8,7 @@ on:
 jobs:
   format-code:
     runs-on: "ubuntu-latest"
-    container: rust:1.95
+    container: rust:1.98.1
 
     steps:
       - name: Checkout the code on merge

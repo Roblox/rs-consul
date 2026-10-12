@@ -13,7 +13,7 @@ jobs:
       matrix:
         features: [""]
     runs-on: "ubuntu-latest"
-    container: rust:1.95
+    container: rust:1.98.1
 
     steps:
       - uses: actions/checkout@v2
@@ -26,7 +26,7 @@ jobs:
       matrix:
         features: [""]
     runs-on: "ubuntu-latest"
-    container: rust:1.95
+    container: rust:1.98.1
     services:
       consul:
         image: consul:1.11.11
